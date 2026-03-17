@@ -4,9 +4,12 @@ RAG Implementation - Hands-on Exercise
 This exercise demonstrates building a complete RAG pipeline.
 """
 
+import sys
+import os
 from typing import List, Dict, Any
-import hashlib
-import math
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "03_vector_databases"))
+from exercise import HuggingFaceEmbedding, ChromaVectorStore
 
 
 # ============================================================================
@@ -20,65 +23,37 @@ class SimpleRAGPipeline:
     def __init__(self, chunk_size: int = 500, overlap: int = 50):
         self.chunk_size = chunk_size
         self.overlap = overlap
-        self.documents: List[Dict[str, Any]] = []
-        self.chunks: List[Dict[str, Any]] = []
+        self.embed_fn = HuggingFaceEmbedding()
+        self.vector_store = ChromaVectorStore()
+        self.chunk_metadata: List[Dict[str, Any]] = []
 
     def load_documents(self, docs: List[str], sources: List[str] = None):
         """Load and chunk documents."""
         sources = sources or [f"doc_{i}" for i in range(len(docs))]
 
         for i, doc in enumerate(docs):
-            # Simple chunking
-            chunks = self._chunk_text(doc)
-            for j, chunk in enumerate(chunks):
-                self.chunks.append(
-                    {
-                        "id": f"{sources[i]}_chunk_{j}",
-                        "text": chunk,
-                        "source": sources[i],
-                        "index": j,
-                    }
+            for j, chunk in enumerate(self._chunk_text(doc)):
+                self.chunk_metadata.append(
+                    {"id": f"{sources[i]}_chunk_{j}", "text": chunk, "source": sources[i]}
                 )
 
     def _chunk_text(self, text: str) -> List[str]:
         """Simple text chunking."""
         words = text.split()
-        chunks = []
-
-        for i in range(0, len(words), self.chunk_size // 6):  # Approx 6 chars per word
-            chunk = " ".join(words[i : i + self.chunk_size // 6])
-            if chunk:
-                chunks.append(chunk)
-
-        return chunks if chunks else [text]
+        step = self.chunk_size // 6  # Approx 6 chars per word
+        chunks = [" ".join(words[i : i + step]) for i in range(0, len(words), step)]
+        return [c for c in chunks if c] or [text]
 
     def build_index(self):
-        """Build an in-memory index (simplified)."""
-        for chunk in self.chunks:
-            # Create simple hash-based vectors
-            chunk["vector"] = self._text_to_vector(chunk["text"])
-
-    def _text_to_vector(self, text: str) -> List[float]:
-        """Convert text to vector (simplified)."""
-        import random
-
-        hash_val = int(hashlib.md5(text.encode()).hexdigest()[:8], 16)
-        random.seed(hash_val)
-        return [random.uniform(-1, 1) for _ in range(384)]
+        """Build an in-memory index."""
+        for meta in self.chunk_metadata:
+            self.vector_store.add(meta["id"], self.embed_fn.embed(meta["text"]), meta)
 
     def retrieve(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
         """Retrieve relevant chunks."""
-        query_vector = self._text_to_vector(query)
-
-        # Calculate similarities
-        results = []
-        for chunk in self.chunks:
-            sim = sum(a * b for a, b in zip(query_vector, chunk["vector"]))
-            results.append((chunk, sim))
-
-        # Sort and return top k
-        results.sort(key=lambda x: x[1], reverse=True)
-        return [r[0] for r in results[:k]]
+        query_vector = self.embed_fn.embed(query)
+        results = self.vector_store.search(query_vector, k)
+        return [meta for _, _, meta in results]
 
     def generate(self, query: str, retrieved_chunks: List[Dict]) -> str:
         """Generate response (simplified - in production use LLM)."""
@@ -124,7 +99,7 @@ def main():
     rag.load_documents(documents)
     rag.build_index()
 
-    print(f"\nIndexed {len(rag.chunks)} chunks")
+    print(f"\nIndexed {len(rag.chunk_metadata)} chunks")
 
     # Query
     query = "What is machine learning?"

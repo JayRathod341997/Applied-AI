@@ -45,20 +45,28 @@ results = evaluate(
 - Insufficient resource allocation
 - Growing dataset without capacity planning
 
-```mermaid
-flowchart TD
-    A[Query] --> B{Vector DB Health}
-    B -->|Healthy| C[Response < 100ms]
-    B -->|Degraded| D[Response > 500ms]
-    B -->|Critical| E[Timeouts]
-    
-    D --> F[Check Index]
-    D --> G[Check Memory]
-    D --> H[Check Network]
-    
-    E --> I[Alert On-Call]
-    E --> J[Fallback to Cache]
-```
+
+                    ┌─────────────────────┐
+                    │        Query        │
+                    └──────────┬──────────┘
+                               ▼
+                    ┌─────────────────────┐
+                    │   Vector DB Health  │
+                    └─────────┬───────────┘
+          ┌──────────────────┬┴──────────────────┐
+          │ Healthy          │ Degraded           │ Critical
+          ▼                  ▼                    ▼
+┌──────────────────┐ ┌───────────────┐  ┌──────────────────────┐
+│ Response < 100ms │ │Response >500ms│  │      Timeouts        │
+└──────────────────┘ └───────┬───────┘  └──────────┬───────────┘
+                             │                      │
+                   ┌─────────┼─────────┐       ┌───┴───────────┐
+                   ▼         ▼         ▼       ▼               ▼
+            ┌───────────┐┌────────┐┌─────────┐ ┌───────────┐ ┌──────────────────┐
+            │Check Index││ Check  ││  Check  │ │Alert On-  │ │Fallback to Cache │
+            │           ││Memory  ││ Network │ │Call       │ │                  │
+            └───────────┘└────────┘└─────────┘ └───────────┘ └──────────────────┘
+
 
 ### 1.3 Embedding Model Drift
 
@@ -201,22 +209,22 @@ result = evaluate(
 - User complaints about slow responses
 - Timeout errors in logs
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant API
-    participant VectorDB
-    participant LLM
-    
-    User->>API: Query
-    API->>VectorDB: Search (50ms)
-    VectorDB-->>API: Results
-    API->>LLM: Generate (2000ms)
-    LLM-->>API: Response
-    
-    Note over API: Total: 2050ms
-    Note over User: Waiting...
-```
+
+   User          API          VectorDB         LLM
+    │             │               │              │
+    │──── Query ──►│               │              │
+    │             │               │              │
+    │             │─ Search ──────►│  (50ms)      │
+    │             │◄─ Results ─────│              │
+    │             │                              │
+    │             │─────── Generate ────────────►│  (2000ms)
+    │             │◄─────── Response ────────────│
+    │             │                              │
+    │             │  [Total: 2050ms]             │
+    │◄─ Response ─│                              │
+    │  (Waiting)  │                              │
+    │             │                              │
+
 
 **Root Causes:**
 - Vector database overloaded

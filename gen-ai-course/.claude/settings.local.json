@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(pip show:*)",
+      "Bash(pip list:*)",
+      "Bash(uv add:*)",
+      "Bash(uv remove:*)"
+    ]
+  }
+}

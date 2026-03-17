@@ -1,21 +1,19 @@
 """
 RAG Overview - Hands-on Exercise
 
-This exercise demonstrates the basic RAG workflow using a simple in-memory
-vector store. You'll build a basic question-answering system over documents.
+This exercise demonstrates the basic RAG workflow using ChromaDB
+and real sentence-transformer embeddings.
 
 Estimated Time: 30 minutes
 """
 
-import os
 from typing import List, Tuple
+from sentence_transformers import SentenceTransformer
+import chromadb
 
 # ============================================================================
 # PART 1: Setup and Imports
 # ============================================================================
-
-# For this exercise, we'll use a simple in-memory approach
-# In production, you'd use libraries like langchain, pinecone, etc.
 
 # Sample documents for our knowledge base
 SAMPLE_DOCUMENTS = [
@@ -78,90 +76,73 @@ SAMPLE_DOCUMENTS = [
 
 
 # ============================================================================
-# PART 2: Simple Embedding Simulation
+# PART 2: Embedding with sentence-transformers
 # ============================================================================
 
 
 class SimpleEmbedding:
     """
-    A simple embedding simulation for educational purposes.
-    In production, use actual embedding models like:
-    - OpenAI's text-embedding-ada-002
-    - HuggingFace's sentence-transformers
-    - Google's text-embedding-004
+    Free local embeddings using sentence-transformers.
+    Model: all-MiniLM-L6-v2 (384-dim, fast, no API key needed)
     """
 
     def __init__(self):
-        # Simulate embeddings with hash-based vectors
-        self.dimension = 384
-
-    def _text_to_vector(self, text: str) -> List[float]:
-        """Convert text to a simple vector representation."""
-        import hashlib
-        import math
-
-        # Create a deterministic but pseudo-random vector based on text
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        seed = int(text_hash[:8], 16)
-
-        # Generate pseudo-random values based on seed
-        import random
-
-        random.seed(seed)
-        vector = [random.uniform(-1, 1) for _ in range(self.dimension)]
-
-        # Normalize the vector
-        magnitude = math.sqrt(sum(x**2 for x in vector))
-        return [x / magnitude for x in vector]
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.dimension = self.model.get_sentence_embedding_dimension()
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed a list of documents."""
-        return [self._text_to_vector(text) for text in texts]
+        return self.model.encode(texts, normalize_embeddings=True).tolist()
 
     def embed_query(self, text: str) -> List[float]:
         """Embed a query."""
-        return self._text_to_vector(text)
+        return self.model.encode(text, normalize_embeddings=True).tolist()
 
 
 # ============================================================================
-# PART 3: Simple Vector Store
+# PART 3: ChromaDB Vector Store
 # ============================================================================
 
 
 class SimpleVectorStore:
     """
-    A simple in-memory vector store for demonstration.
-    In production, use: Pinecone, Weaviate, Chroma, Milvus, etc.
+    ChromaDB-backed in-memory vector store.
+    In production, swap EphemeralClient for PersistentClient.
     """
 
     def __init__(self):
         self.embeddings = SimpleEmbedding()
-        self.documents = []
-        self.vectors = []
+        self._client = chromadb.EphemeralClient()
+        self._collection = self._client.create_collection(
+            "rag_overview", metadata={"hnsw:space": "cosine"}
+        )
+        self._docs: List[dict] = []
 
     def add_documents(self, docs: List[dict]):
         """Add documents to the vector store."""
         texts = [doc["content"] for doc in docs]
         vectors = self.embeddings.embed_documents(texts)
-
-        self.documents.extend(docs)
-        self.vectors.extend(vectors)
-
+        self._collection.add(
+            ids=[doc["id"] for doc in docs],
+            embeddings=vectors,
+            metadatas=[{"idx": i} for i in range(len(docs))],
+        )
+        self._docs.extend(docs)
         print(f"Added {len(docs)} documents to the vector store")
 
     def similarity_search(self, query: str, k: int = 3) -> List[Tuple[dict, float]]:
         """Find k most similar documents to the query."""
         query_vector = self.embeddings.embed_query(query)
+        n = min(k, self._collection.count())
+        if n == 0:
+            return []
 
-        # Calculate cosine similarity
-        similarities = []
-        for i, doc_vector in enumerate(self.vectors):
-            similarity = sum(a * b for a, b in zip(query_vector, doc_vector))
-            similarities.append((self.documents[i], similarity))
-
-        # Sort by similarity (highest first) and return top k
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        return similarities[:k]
+        results = self._collection.query(query_embeddings=[query_vector], n_results=n)
+        id_to_doc = {doc["id"]: doc for doc in self._docs}
+        return [
+            (id_to_doc[id_], 1 - dist)
+            for id_, dist in zip(results["ids"][0], results["distances"][0])
+        ]
 
 
 # ============================================================================
@@ -186,25 +167,17 @@ class SimpleRAG:
 
     def generate_context(self, query: str, retrieved_docs: List[dict]) -> str:
         """Generate augmented context from retrieved documents."""
-        context_parts = []
-
-        for i, doc in enumerate(retrieved_docs, 1):
-            context_parts.append(
-                f"Document {i} (ID: {doc['id']}):\n{doc['content'].strip()}"
-            )
-
+        context_parts = [
+            f"Document {i} (ID: {doc['id']}):\n{doc['content'].strip()}"
+            for i, doc in enumerate(retrieved_docs, 1)
+        ]
         return "\n\n".join(context_parts)
 
     def answer(self, query: str) -> dict:
         """Answer a query using RAG."""
-        # Step 1: Retrieve relevant documents
         retrieved_docs = self.retrieve(query, k=2)
-
-        # Step 2: Generate context
         context = self.generate_context(query, retrieved_docs)
 
-        # Step 3: In production, you would send this to an LLM
-        # For demo, we'll create a simulated response
         response = f"""
 Based on the retrieved context, here is my answer to: "{query}"
 
@@ -230,11 +203,9 @@ def main():
     print("RAG Overview - Hands-on Exercise")
     print("=" * 60)
 
-    # Initialize RAG system with sample documents
     print("\n[Step 1] Initializing RAG system with sample documents...")
     rag = SimpleRAG(SAMPLE_DOCUMENTS)
 
-    # Test queries
     test_queries = [
         "What is Python programming language?",
         "How do LLMs work?",
@@ -247,7 +218,6 @@ def main():
         print("-" * 60)
         print(f"Query: {query}")
         print("-" * 60)
-
         result = rag.answer(query)
         print(result["response"])
         print()
@@ -268,11 +238,10 @@ if __name__ == "__main__":
 """
 EXERCISE TASKS:
 1. Add more documents to the SAMPLE_DOCUMENTS list related to AI/ML
-2. Modify the similarity_search to use different similarity metrics
+2. Try a different model: SentenceTransformer('all-mpnet-base-v2') for higher accuracy
 3. Add document metadata (source, date, author) and include in retrieval
 4. Implement a simple reranking of retrieved documents
-5. Add support for document deletion or updates
+5. Swap EphemeralClient for PersistentClient to persist the index across runs
 
-BONUS: Replace SimpleEmbedding with actual OpenAI embeddings
-(requires: pip install openai)
+BONUS: Add an actual LLM call (e.g., via Ollama or Anthropic API) to generate answers
 """

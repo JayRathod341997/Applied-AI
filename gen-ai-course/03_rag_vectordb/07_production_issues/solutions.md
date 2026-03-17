@@ -433,29 +433,24 @@ class RAGFallback:
 
 ### 5.2 Production Best Practices
 
-```mermaid
-flowchart TD
-    A[Production Checklist] --> B[Monitoring]
-    A --> C[Reliability]
-    A --> D[Security]
-    A --> E[Performance]
-    
-    B --> B1[Set up alerts]
-    B --> B2[Track metrics]
-    B --> B3[Log errors]
-    
-    C --> C1[Implement retries]
-    C --> C2[Add circuit breakers]
-    C --> C3[Configure fallbacks]
-    
-    D --> D1[Validate inputs]
-    D --> D2[Sanitize outputs]
-    D --> D3[Encrypt sensitive data]
-    
-    E --> E1[Add caching]
-    E --> E2[Optimize queries]
-    E --> E3[Set timeouts]
-```
+
+                    ┌────────────────────────────┐
+                    │     Production Checklist   │
+                    └───────────────┬────────────┘
+         ┌──────────────┬───────────┴──────────┬──────────────┐
+         ▼              ▼                      ▼              ▼
+┌──────────────┐ ┌─────────────┐     ┌──────────────┐ ┌─────────────────┐
+│  Monitoring  │ │ Reliability │     │   Security   │ │  Performance    │
+├──────────────┤ ├─────────────┤     ├──────────────┤ ├─────────────────┤
+│► Set up      │ │► Implement  │     │► Validate    │ │► Add caching    │
+│  alerts      │ │  retries    │     │  inputs      │ │                 │
+│► Track       │ │► Add circuit│     │► Sanitize    │ │► Optimize       │
+│  metrics     │ │  breakers   │     │  outputs     │ │  queries        │
+│► Log errors  │ │► Configure  │     │► Encrypt     │ │► Set timeouts   │
+│              │ │  fallbacks  │     │  sensitive   │ │                 │
+│              │ │             │     │  data        │ │                 │
+└──────────────┘ └─────────────┘     └──────────────┘ └─────────────────┘
+
 
 ### 5.3 Operational Best Practices
 

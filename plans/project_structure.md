@@ -67,6 +67,24 @@ gen-ai-course/
 │   ├── 01_risks_guardrails/
 │   ├── 02_responsible_ai/
 │   └── 03_compliance/
+├── 11_fine-tuning/        # Module 11: Fine-tuning
+│   ├── 01_fine-tuning_overview/
+│   ├── 02_fine-tuning_techniques/
+│   └── 03_fine-tuning_implementation/
+|       |__ 01_LoRA_fine_tuning/
+|       |__ 02_QLoRA_fine_tuning/
+|       |__ 03_PEFT_fine_tuning/
+|       |__ 04_full_fine_tuning/
+|       |__ 05_fine_tuning_with_unsloth/ (with google colab)
+|       |__ 06_fine_tuning_with_huggingface_mlops/
+|       |__ 07_fine_tuning_with_azure_mlops/
+|       |__ 08_fine_tuning_with_aws_mlops/
+|       |__ 09_fine_tuning_with_gcp_mlops/
+├── 12_deployment/        # Module 12: Deployment
+│   ├── 01_deployment_overview/
+│   ├── 02_deployment_techniques/
+│   └── 03_deployment_implementation_with_azure/
+|   |__ 04_deployment_with_aws_mlops/
 │
 ├── data/                        # Sample data files
 │   └── sample_docs/

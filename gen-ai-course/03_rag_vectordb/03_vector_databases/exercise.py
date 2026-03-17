@@ -1,53 +1,76 @@
 """
 Vector Databases - Hands-on Exercise
 
-This exercise demonstrates working with vector databases using a simple
-in-memory implementation and introduces real database integrations.
+This exercise demonstrates working with vector databases using ChromaDB
+and real sentence-transformer embeddings.
 
 Estimated Time: 45 minutes
 """
 
-import math
-import hashlib
-import random
 from typing import List, Dict, Any, Tuple, Optional
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+import chromadb
 
 
 # ============================================================================
-# PART 1: Simple In-Memory Vector Store
+# PART 1: HuggingFace Embedding (free, local, no API key needed)
 # ============================================================================
 
 
-class SimpleVectorStore:
+class HuggingFaceEmbedding:
+    """Free local embeddings using HuggingFace transformers (mean pooling)."""
+
+    def __init__(self, model_name: str = "google-bert/bert-base-uncased"):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.model.eval()
+        self.dimension = self.model.config.hidden_size
+
+    def _mean_pool(self, model_output, attention_mask) -> torch.Tensor:
+        token_embeddings = model_output.last_hidden_state
+        mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        return torch.sum(token_embeddings * mask, 1) / torch.clamp(mask.sum(1), min=1e-9)
+
+    def embed(self, text: str) -> List[float]:
+        """Generate normalized embedding for a single text."""
+        return self.embed_batch([text])[0]
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate normalized embeddings for multiple texts."""
+        encoded = self.tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+        with torch.no_grad():
+            output = self.model(**encoded)
+        pooled = self._mean_pool(output, encoded["attention_mask"])
+        normalized = F.normalize(pooled, p=2, dim=1)
+        return normalized.tolist()
+
+
+# ============================================================================
+# PART 2: ChromaDB Vector Store
+# ============================================================================
+
+
+class ChromaVectorStore:
     """
-    A simple in-memory vector store for demonstration.
-    This mimics the core functionality of databases like Pinecone, Chroma, etc.
+    In-memory vector store backed by ChromaDB.
+    Mirrors the interface of a production vector database.
     """
 
-    def __init__(self, dimension: int = 384):
-        self.dimension = dimension
-        self.vectors: List[List[float]] = []
-        self.metadata: List[Dict[str, Any]] = []
-        self.ids: List[str] = []
+    def __init__(self, collection_name: str = "exercise"):
+        self.client = chromadb.EphemeralClient()
+        self.collection = self.client.create_collection(
+            collection_name, metadata={"hnsw:space": "cosine"}
+        )
 
     def add(self, id: str, vector: List[float], metadata: Dict[str, Any] = None):
         """Add a vector to the store."""
-        if len(vector) != self.dimension:
-            raise ValueError(f"Vector dimension must be {self.dimension}")
-
-        self.ids.append(id)
-        self.vectors.append(vector)
-        self.metadata.append(metadata or {})
-
-    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
-        """Calculate cosine similarity between two vectors."""
-        dot_product = sum(x * y for x, y in zip(a, b))
-        mag_a = math.sqrt(sum(x * x for x in a))
-        mag_b = math.sqrt(sum(x * x for x in b))
-
-        if mag_a == 0 or mag_b == 0:
-            return 0.0
-        return dot_product / (mag_a * mag_b)
+        self.collection.add(
+            ids=[id],
+            embeddings=[vector],
+            metadatas=[metadata or {}],
+        )
 
     def search(
         self,
@@ -58,112 +81,40 @@ class SimpleVectorStore:
         """
         Search for k most similar vectors.
 
-        Args:
-            query_vector: The query vector
-            k: Number of results to return
-            filter_metadata: Optional metadata filter
-
         Returns:
-            List of (id, score, metadata) tuples
+            List of (id, similarity_score, metadata) tuples
         """
-        if len(query_vector) != self.dimension:
-            raise ValueError(f"Query vector dimension must be {self.dimension}")
+        n = min(k, self.collection.count())
+        if n == 0:
+            return []
 
-        results = []
+        results = self.collection.query(
+            query_embeddings=[query_vector],
+            n_results=n,
+            where=filter_metadata,
+        )
+        # cosine space: distance = 1 - cosine_sim → similarity = 1 - distance
+        return [
+            (id_, 1 - dist, meta)
+            for id_, dist, meta in zip(
+                results["ids"][0],
+                results["distances"][0],
+                results["metadatas"][0],
+            )
+        ]
 
-        for i, vector in enumerate(self.vectors):
-            # Apply metadata filter if specified
-            if filter_metadata:
-                match = all(
-                    self.metadata[i].get(key) == value
-                    for key, value in filter_metadata.items()
-                )
-                if not match:
-                    continue
-
-            score = self._cosine_similarity(query_vector, vector)
-            results.append((self.ids[i], score, self.metadata[i]))
-
-        # Sort by score (highest first) and return top k
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results[:k]
-
-    def delete(self, id: str) -> bool:
+    def delete(self, id: str):
         """Delete a vector by ID."""
-        if id in self.ids:
-            index = self.ids.index(id)
-            del self.ids[index]
-            del self.vectors[index]
-            del self.metadata[index]
-            return True
-        return False
+        self.collection.delete(ids=[id])
 
     def count(self) -> int:
         """Return the number of vectors in the store."""
-        return len(self.vectors)
-
-
-# ============================================================================
-# PART 2: Mock Embedding Function
-# ============================================================================
-
-
-class MockEmbedding:
-    """Mock embedding function for demonstration."""
-
-    def __init__(self, dimension: int = 384):
-        self.dimension = dimension
-
-    def embed(self, text: str) -> List[float]:
-        """Generate a deterministic vector from text."""
-        # Use hash to create a pseudo-random but deterministic vector
-        hash_input = hashlib.md5(text.encode()).hexdigest()
-        seed = int(hash_input[:8], 16)
-
-        random.seed(seed)
-        vector = [random.uniform(-1, 1) for _ in range(self.dimension)]
-
-        # Normalize
-        magnitude = math.sqrt(sum(x * x for x in vector))
-        return [x / magnitude for x in vector]
+        return self.collection.count()
 
 
 # ============================================================================
 # PART 3: Real Database Integration Examples
 # ============================================================================
-
-
-def example_chroma_usage():
-    """
-    Example of using Chroma vector database.
-    Note: Requires 'pip install chromadb'
-    """
-    # This is pseudocode to show the API
-    """
-    import chromadb
-    
-    # Initialize client
-    client = chromadb.Client()
-    
-    # Create or get collection
-    collection = client.create_collection("my_documents")
-    
-    # Add documents
-    collection.add(
-        documents=["doc1 text", "doc2 text"],
-        ids=["doc1", "doc2"],
-        metadatas=[{"source": "pdf"}, {"source": "web"}]
-    )
-    
-    # Query
-    results = collection.query(
-        query_texts=["search query"],
-        n_results=2
-    )
-    
-    return results
-    """
-    pass
 
 
 def example_pinecone_usage():
@@ -174,44 +125,34 @@ def example_pinecone_usage():
     # This is pseudocode
     """
     from pinecone import Pinecone
-    
-    # Initialize
+
     pc = Pinecone(api_key="your-api-key")
     index = pc.Index("my-index")
-    
-    # Upsert vectors
+
     index.upsert(
         vectors=[
             {"id": "vec1", "values": [0.1, 0.2, ...], "metadata": {"text": "doc1"}},
-            {"id": "vec2", "values": [0.3, 0.4, ...], "metadata": {"text": "doc2"}}
         ]
     )
-    
-    # Query
-    results = index.query(
-        vector=[0.1, 0.2, ...],
-        top_k=5,
-        include_metadata=True
-    )
-    
+
+    results = index.query(vector=[0.1, 0.2, ...], top_k=5, include_metadata=True)
     return results
     """
     pass
 
 
 # ============================================================================
-# PART 4: Demo the Simple Vector Store
+# PART 4: Demo
 # ============================================================================
 
 
 def main():
-    """Demonstrate the simple vector store."""
+    """Demonstrate the ChromaDB vector store with real embeddings."""
 
     print("=" * 60)
     print("Vector Databases - Hands-on Exercise")
     print("=" * 60)
 
-    # Sample documents
     documents = [
         {
             "id": "doc1",
@@ -240,21 +181,17 @@ def main():
         },
     ]
 
-    # Create embedding function and vector store
-    embed_fn = MockEmbedding(dimension=384)
-    vector_store = SimpleVectorStore(dimension=384)
+    embed_fn = HuggingFaceEmbedding()
+    vector_store = ChromaVectorStore()
 
-    # Add documents to vector store
-    print("\n[Step 1] Adding documents to vector store...")
+    print("\n[Step 1] Adding documents to ChromaDB...")
     for doc in documents:
         vector = embed_fn.embed(doc["text"])
         vector_store.add(doc["id"], vector, doc["metadata"])
 
     print(f"Added {vector_store.count()} documents")
 
-    # Test queries
     print("\n[Step 2] Testing similarity search...")
-
     queries = [
         "What is Python programming?",
         "Tell me about artificial intelligence",
@@ -263,14 +200,11 @@ def main():
     for query in queries:
         print(f"\nQuery: {query}")
         print("-" * 40)
-
         query_vector = embed_fn.embed(query)
         results = vector_store.search(query_vector, k=3)
+        for id_, score, metadata in results:
+            print(f"  {id_} (score: {score:.3f}) - {metadata}")
 
-        for id, score, metadata in results:
-            print(f"  {id} (score: {score:.3f}) - {metadata}")
-
-    # Test metadata filtering
     print("\n[Step 3] Testing metadata filtering...")
     query_vector = embed_fn.embed("Tell me about programming")
     results = vector_store.search(
@@ -278,8 +212,8 @@ def main():
     )
 
     print("Filtered by topic=programming:")
-    for id, score, metadata in results:
-        print(f"  {id} (score: {score:.3f})")
+    for id_, score, metadata in results:
+        print(f"  {id_} (score: {score:.3f})")
 
     print("\n[Step 4] Exercise complete!")
     print("Try modifying the documents or adding more queries")
@@ -295,11 +229,11 @@ if __name__ == "__main__":
 
 """
 EXERCISE TASKS:
-1. Implement Euclidean distance as an alternative similarity metric
-2. Add support for batch adding of vectors
-3. Implement a simple HNSW-like index for faster search
-4. Add support for updating existing vectors
-5. Add persistence to save/load the vector store
+1. Try a different sentence-transformer model (e.g., 'all-mpnet-base-v2')
+2. Add support for batch adding of vectors using embed_batch()
+3. Add persistence: swap EphemeralClient for chromadb.PersistentClient(path="./chroma_db")
+4. Implement a simple reranking step after retrieval
+5. Add support for updating existing vectors
 
-BONUS: Integrate with a real vector database (Chroma or Pinecone)
+BONUS: Integrate with Pinecone using the pseudocode above
 """

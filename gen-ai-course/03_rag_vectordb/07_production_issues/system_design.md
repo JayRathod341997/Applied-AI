@@ -10,104 +10,84 @@ Building a production-grade RAG system requires careful architectural decisions.
 
 ### 1.1 Core Components
 
-```mermaid
-flowchart TB
-    subgraph Client["Client Layer"]
-        A[Web App]
-        B[Mobile App]
-        C[API]
-    end
-    
-    subgraph Gateway["API Gateway"]
-        D[Load Balancer]
-        E[Auth/Authz]
-        F[Rate Limiter]
-    end
-    
-    subgraph RAG["RAG Service"]
-        G[Query Processor]
-        H[Retrieval Engine]
-        I[Generation Service]
-        J[Cache Layer]
-    end
-    
-    subgraph Data["Data Layer"]
-        K[(Vector DB)]
-        L[(Document Store)]
-        M[(Cache)]
-    end
-    
-    subgraph ML["ML Services"]
-        N[Embedding Service]
-        O[Reranking Service]
-    end
-    
-    subgraph Observability["Observability"]
-        P[Metrics]
-        Q[Logging]
-        R[Tracing]
-    end
-    
-    A --> D
-    B --> D
-    C --> D
-    D --> E
-    E --> F
-    F --> G
-    G --> H
-    G --> N
-    H --> K
-    H --> L
-    H --> O
-    O --> K
-    I --> J
-    I --> M
-    G --> Q
-    H --> Q
-    I --> P
-    K --> R
-```
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              Client Layer                                │
+│                                                                          │
+│          ┌───────────┐      ┌────────────┐      ┌───────────┐           │
+│          │  Web App  │      │ Mobile App │      │    API    │           │
+│          └─────┬─────┘      └─────┬──────┘      └─────┬─────┘           │
+└────────────────│──────────────────│────────────────────│─────────────────┘
+                 └──────────────────┼────────────────────┘
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              API Gateway                                 │
+│                                                                          │
+│          ┌─────────────────────────────────────────────────────┐        │
+│          │  Load Balancer  ──►  Auth/Authz  ──►  Rate Limiter  │        │
+│          └──────────────────────────────────────┬──────────────┘        │
+└─────────────────────────────────────────────────│────────────────────────┘
+                                                  ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                              RAG Service                                 │
+│                                                                          │
+│   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
+│   │  Query Processor │──► │ Retrieval Engine │    │Generation Service│  │
+│   └────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘  │
+│            │ (Logging)             │                        │            │
+│            │                       │                        ▼            │
+│            │                       │              ┌──────────────────┐  │
+│            │                       │              │   Cache Layer    │  │
+│            │                       │              └──────────────────┘  │
+└────────────│───────────────────────│────────────────────────────────────┘
+             │                       │
+    ┌────────┘               ┌───────┴─────────────────────┐
+    ▼                        ▼                             ▼
+┌──────────────────┐  ┌────────────────────────────────────────────────┐
+│   ML Services    │  │                  Data Layer                    │
+│                  │  │                                                │
+│ ┌──────────────┐ │  │  ┌────────────┐  ┌──────────────┐  ┌───────┐ │
+│ │  Embedding   │ │  │  │ Vector DB  │  │Document Store│  │ Cache │ │
+│ │  Service     │ │  │  └────────────┘  └──────────────┘  └───────┘ │
+│ └──────────────┘ │  └────────────────────────────────────────────────┘
+│ ┌──────────────┐ │
+│ │  Reranking   │ │   ┌──────────────────────────────────────────────┐
+│ │  Service     │ │   │               Observability                  │
+│ └──────────────┘ │   │                                              │
+└──────────────────┘   │  ┌────────────┐ ┌─────────┐ ┌───────────┐  │
+                       │  │  Metrics   │ │ Logging │ │  Tracing  │  │
+                       │  └────────────┘ └─────────┘ └───────────┘  │
+                       └──────────────────────────────────────────────┘
+
 
 ### 1.2 Data Flow
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API
-    participant Cache
-    participant Retriever
-    participant VectorDB
-    participant Reranker
-    participant LLM
-    participant Response
 
-    Client->>API: User Query
-    
-    alt Cache Hit
-        API->>Cache: Check Cache
-        Cache-->>API: Cached Response
-        API-->>Client: Return Response
-    else Cache Miss
-        API->>Retriever: Process Query
-        
-        Retriever->>VectorDB: Semantic Search
-        VectorDB-->>Retriever: Top-K Results
-        
-        Retriever->>Retriever: Query Expansion
-        
-        Retriever->>Reranker: Re-rank Results
-        Reranker-->>Retriever: Re-ranked Docs
-        
-        Retriever->>API: Selected Documents
-        
-        API->>LLM: Generate Response
-        LLM-->>API: Generated Text
-        
-        API->>Cache: Store in Cache
-        
-        API-->>Client: Final Response
-    end
-```
+  Client       API        Cache     Retriever   VectorDB   Reranker     LLM
+    │            │            │           │           │          │         │
+    │─User Query►│            │           │           │          │         │
+    │            │            │           │           │          │         │
+    │   ┌────────────── CACHE HIT PATH ──────────────────────────────┐    │
+    │   │        │─Check Cache►│           │           │          │   │    │
+    │   │        │◄─Cached Resp│           │           │          │   │    │
+    │   │       ◄│─Return Resp─│           │           │          │   │    │
+    │   └────────────────────────────────────────────────────────────┘    │
+    │            │            │           │           │          │         │
+    │   ┌────────────── CACHE MISS PATH ─────────────────────────────┐    │
+    │   │        │──Process Query─────────►│           │          │   │    │
+    │   │        │            │            │─Sem Search►│          │   │    │
+    │   │        │            │            │◄─Top-K Results         │   │    │
+    │   │        │            │            │  (Query Expansion)     │   │    │
+    │   │        │            │            │──Re-rank Res──────────►│   │    │
+    │   │        │            │            │◄─Re-ranked Docs────────┘   │    │
+    │   │        │◄─Selected Documents─────│           │          │   │    │
+    │   │        │────────────────────────────────────────────────────────►│
+    │   │        │◄───────────────────────────────────────────────────────│
+    │   │        │─Store in Cache►│        │           │          │   │    │
+    │   │       ◄│─Final Response─│        │           │          │   │    │
+    │   └────────────────────────────────────────────────────────────┘    │
+    │            │            │           │           │          │         │
+
 
 ---
 
@@ -237,40 +217,31 @@ class GenerationService:
 
 ### 3.1 Horizontal Scaling
 
-```mermaid
-flowchart LR
-    subgraph LoadBalancer["Load Balancer"]
-        LB[Round Robin / Least Connections]
-    end
-    
-    subgraph Workers["RAG Workers"]
-        W1[Worker 1]
-        W2[Worker 2]
-        W3[Worker N]
-    end
-    
-    subgraph Shared["Shared Services"]
-        DB[(Vector DB)]
-        Cache[(Redis Cache)]
-        Q[Message Queue]
-    end
-    
-    LB --> W1
-    LB --> W2
-    LB --> W3
-    
-    W1 --> DB
-    W2 --> DB
-    W3 --> DB
-    
-    W1 --> Cache
-    W2 --> Cache
-    W3 --> Cache
-    
-    W1 --> Q
-    W2 --> Q
-    W3 --> Q
-```
+
+┌────────────────────────────┐
+│        Load Balancer       │
+│  Round Robin /             │
+│  Least Connections         │
+└──────┬──────────┬──────────┘
+       │          │          │
+       ▼          ▼          ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                           RAG Workers                                │
+│                                                                      │
+│  ┌────────────┐       ┌────────────┐       ┌────────────┐           │
+│  │  Worker 1  │       │  Worker 2  │       │  Worker N  │           │
+│  └──┬──┬──┬───┘       └──┬──┬──┬───┘       └──┬──┬──┬───┘           │
+└─────│──│──│──────────────│──│──│──────────────│──│──│───────────────┘
+      │  │  │              │  │  │              │  │  │
+      ▼  ▼  ▼              ▼  ▼  ▼              ▼  ▼  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                          Shared Services                             │
+│                                                                      │
+│       ┌────────────┐    ┌───────────────┐    ┌──────────────┐       │
+│       │  Vector DB │    │  Redis Cache  │    │Message Queue │       │
+│       └────────────┘    └───────────────┘    └──────────────┘       │
+└──────────────────────────────────────────────────────────────────────┘
+
 
 **Implementation:**
 ```python
@@ -305,46 +276,46 @@ class RAGWorker:
 
 ### 3.2 Caching Architecture
 
-```mermaid
-flowchart TB
-    subgraph Client["Client Request"]
-        Q[Query]
-    end
-    
-    subgraph Cache["Multi-Layer Cache"]
-        L1[L1: In-Memory]
-        L2[L2: Redis]
-        L3[L3: CDN]
-    end
-    
-    subgraph Backend["Backend Services"]
-        RAG[RAG Pipeline]
-        VDB[(Vector DB)]
-        LLM[LLM API]
-    end
-    
-    Q --> L1
-    
-    alt L1 Hit
-        L1 -->|Return| Client
-    else
-        L1 --> L2
-        alt L2 Hit
-            L2 -->|Return + Populate L1| Client
-        else
-            L2 --> L3
-            alt L3 Hit
-                L3 -->|Return + Populate L2| Client
-            else
-                L3 --> RAG
-                RAG --> VDB
-                RAG --> LLM
-                LLM -->|Response| RAG
-                RAG -->|Populate All Levels| Client
-            end
-        end
-    end
-```
+
+             ┌────────────────────────────────────┐
+             │          Client Request            │
+             │            ┌─────────┐             │
+             │            │  Query  │             │
+             │            └────┬────┘             │
+             └─────────────────│──────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                        Multi-Layer Cache                         │
+│                                                                  │
+│  ┌────────────────┐                                              │
+│  │  L1: In-Memory │◄──── HIT: Return directly to Client         │
+│  └───────┬────────┘                                              │
+│          │ MISS                                                  │
+│          ▼                                                        │
+│  ┌────────────────┐                                              │
+│  │  L2: Redis     │◄──── HIT: Return + Populate L1              │
+│  └───────┬────────┘                                              │
+│          │ MISS                                                  │
+│          ▼                                                        │
+│  ┌────────────────┐                                              │
+│  │  L3: CDN       │◄──── HIT: Return + Populate L2              │
+│  └───────┬────────┘                                              │
+└──────────│───────────────────────────────────────────────────────┘
+           │ MISS
+           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       Backend Services                           │
+│                                                                  │
+│    ┌──────────────┐   ┌────────────┐   ┌──────────────┐         │
+│    │ RAG Pipeline │──►│  Vector DB │   │   LLM API    │         │
+│    │              │◄──│            │   │              │         │
+│    │              │──────────────────► │              │         │
+│    │              │◄──────────────────  │              │         │
+│    └──────┬───────┘   └────────────┘   └──────────────┘         │
+└───────────│──────────────────────────────────────────────────────┘
+            │
+            ▼ Populate All Cache Levels ──► Client
+
 
 ### 3.3 Async Processing
 
@@ -430,23 +401,40 @@ class RAGCircuitBreaker:
 
 ### 4.2 Graceful Degradation
 
-```mermaid
-flowchart TD
-    A[Query Received] --> B{Vector DB Healthy?}
-    B -->|Yes| C{Embedding Service?}
-    B -->|No| D[Fallback: Cache]
-    D --> E[Return Cached]
-    
-    C -->|Yes| F{LLM Available?}
-    C -->|No| G[Use Simple Keyword Match]
-    G --> E
-    
-    F -->|Yes| H[Full RAG Pipeline]
-    F -->|No| I[Fallback: Exact Match]
-    I --> E
-    
-    H --> E
-```
+
+               ┌─────────────────────┐
+               │    Query Received   │
+               └──────────┬──────────┘
+                          ▼
+               ┌──────────────────────┐
+               │  Vector DB Healthy?  │
+               └──────┬───────────────┘
+           Yes ◄───────┘      └──────► No
+           │                          │
+           ▼                          ▼
+  ┌──────────────────┐     ┌──────────────────────┐
+  │Embedding Service?│     │   Fallback: Cache    │
+  └──────┬───────────┘     └──────────┬───────────┘
+  Yes ◄──┘   └──► No                  │
+  │                │                  ▼
+  │         ┌──────────────────┐   ┌─────────────────┐
+  │         │Use Simple Keyword│──►│  Return Cached  │
+  │         │     Match        │   └─────────────────┘
+  │         └──────────────────┘          ▲
+  ▼                                       │
+┌─────────────────┐                       │
+│  LLM Available? │                       │
+└──────┬──────────┘                       │
+ Yes ◄─┘  └──► No                        │
+ │               │                        │
+ ▼               ▼                        │
+┌──────────────┐ ┌───────────────────┐    │
+│Full RAG      │ │Fallback:          │    │
+│Pipeline      │ │Exact Match        │────┘
+└──────┬───────┘ └──────────────────-┘
+       │
+       └──────────────────────────────►┘
+
 
 ---
 
@@ -575,29 +563,19 @@ class RAGSecurity:
 
 ### 6.2 Data Privacy
 
-```mermaid
-flowchart LR
-    subgraph Input["Input Processing"]
-        PII[Detect PII]
-        ANON[Anonymize]
-    end
-    
-    subgraph RAG["RAG Processing"]
-        RET[Retrieval]
-        GEN[Generation]
-    end
-    
-    subgraph Output["Output Processing"]
-        FILTER[Filter PII]
-        AUDIT[Audit Log]
-    end
-    
-    Input --> RAG --> Output
-    PII --> ANON
-    ANON --> RET
-    GEN --> FILTER
-    FILTER --> AUDIT
-```
+
+┌──────────────────────────┐    ┌─────────────────────────┐    ┌──────────────────────────┐
+│     Input Processing     │    │      RAG Processing      │    │     Output Processing    │
+│                          │    │                          │    │                          │
+│  ┌────────────────────┐  │    │  ┌───────────────────┐  │    │  ┌────────────────────┐  │
+│  │    Detect PII      │  │    │  │     Retrieval     │  │    │  │    Filter PII      │  │
+│  └─────────┬──────────┘  │    │  └─────────┬─────────┘  │    │  └────────┬───────────┘  │
+│            ▼             │    │            ▼             │    │           ▼              │
+│  ┌────────────────────┐  │──► │  ┌───────────────────┐  │──► │  ┌────────────────────┐  │
+│  │    Anonymize       │  │    │  │    Generation     │  │    │  │    Audit Log       │  │
+│  └────────────────────┘  │    │  └───────────────────┘  │    │  └────────────────────┘  │
+└──────────────────────────┘    └─────────────────────────┘    └──────────────────────────┘
+
 
 ---
 
@@ -660,29 +638,29 @@ spec:
 
 ### 7.2 Service Mesh
 
-```mermaid
-flowchart TB
-    subgraph K8s["Kubernetes Cluster"]
-        subgraph Mesh["Service Mesh"]
-            API[RAG API Pod]
-            Worker[RAG Worker Pod]
-            VectorDB[Vector DB Pod]
-        end
-        
-        LB[Load Balancer]
-        Monitor[Monitoring]
-    end
-    
-    External[External Traffic]
-    
-    External --> LB
-    LB --> API
-    API --> Worker
-    API --> VectorDB
-    
-    Monitor -.->|Observe| Mesh
-    Mesh -.->|Report| Monitor
-```
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                        Kubernetes Cluster                           │
+  │                                                                     │
+  │  ┌──────────────────────────────────────────────────────────────┐  │
+  │  │                        Service Mesh                          │  │
+  │  │                                                              │  │
+  │  │   ┌─────────────┐    ┌──────────────┐    ┌──────────────┐   │  │
+  │  │   │ RAG API Pod │──► │RAG Worker Pod│    │Vector DB Pod │   │  │
+  │  │   └──────┬──────┘    └──────────────┘    └──────────────┘   │  │
+  │  │          │──────────────────────────────────────────────►    │  │
+  │  └──────────────────────────────────────────────────────────────┘  │
+  │          ▲  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  · ▼    │
+  │  ┌───────┴────────┐           ┌────────────────────────────────┐   │
+  │  │ Load Balancer  │           │         Monitoring             │   │
+  │  └───────▲────────┘           │  (Observe ◄──► Report)        │   │
+  │          │                    └────────────────────────────────┘   │
+  └──────────│──────────────────────────────────────────────────────────┘
+             │
+  ┌──────────┴─────────┐
+  │  External Traffic  │
+  └────────────────────┘
+
 
 ---
 
