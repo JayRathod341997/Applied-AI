@@ -751,7 +751,216 @@ Our Differentiators:
 
 ---
 
-## Enterprise AI Adoption Summary
+## Prompt Techniques Explained with Real-World Examples
+
+This section explains key prompt engineering techniques with complexity levels and real-world applications.
+
+| Technique | Use Case | Complexity |
+|-----------|----------|------------|
+| Role Prompting | Tone & expertise control | Low |
+| Zero-Shot | Simple tasks | Low |
+| Few-Shot | Format replication | Low |
+| Chain-of-Thought | Math, logic, analysis | Medium |
+| Tree of Thought | Strategic decisions | High |
+| Prompt Chaining | Multi-step workflows | High |
+
+---
+
+### 1. Role Prompting - Low Complexity
+
+**What it is:** Assigning the AI a specific persona or role to control tone and expertise.
+
+**Real-World Example - Customer Service Response:**
+
+```
+Vague Prompt:
+"Explain the return policy."
+
+Enhanced with Role Prompting:
+"You are a friendly, patient customer service representative at a retail store. 
+Explain the 30-day return policy to a frustrated customer who bought a gift that 
+doesn't fit. Use a compassionate tone and offer alternatives."
+```
+
+**Why it works:** The role sets the tone (friendly, patient), expertise level (knowledgeable about policy), and context (retail setting), resulting in a more appropriate response.
+
+---
+
+### 2. Zero-Shot Prompting - Low Complexity
+
+**What it is:** Asking the AI to perform a task without any examples.
+
+**Real-World Example - Email Categorization:**
+
+```
+Prompt:
+"Categorize this email: 'Please update the Q3 sales numbers in the shared 
+drive by Friday.'
+
+Categories: Urgent, Request, Information, Spam"
+```
+
+**Output:** Request
+
+**Why it works:** Simple classification tasks don't require examples when the task is clear and categories are well-defined.
+
+---
+
+### 3. Few-Shot Prompting - Low Complexity
+
+**What it is:** Providing 2-5 examples to show the AI the desired format or approach.
+
+**Real-World Example - Meeting Notes Summary:**
+
+```
+Prompt:
+"Convert these meeting notes into action items.
+
+Example 1:
+Notes: 'John will prepare the budget report by Tuesday. Team agreed to launch in Q2.'
+Action Items:
+- John: Prepare budget report (Due: Tuesday)
+- Team: Plan Q2 launch
+
+Example 2:
+Notes: 'Sarah needs access to the analytics platform. Next meeting is March 15.'
+Action Items:
+- IT: Grant Sarah analytics platform access
+- Everyone: Calendar March 15 meeting
+
+Now convert:
+Notes: 'Mike will review the vendor contracts. We need to schedule a demo with TechCorp. Budget discussion moved to next week.'
+Action Items:"
+```
+
+**Output:**
+- Mike: Review vendor contracts
+- Sales: Schedule TechCorp demo
+- Finance: Prepare budget discussion (Next week)
+
+**Why it works:** Examples show the format (who does what + due dates) so the AI replicates it exactly.
+
+---
+
+### 4. Chain-of-Thought (CoT) - Medium Complexity
+
+**What it is:** Encouraging step-by-step reasoning to improve accuracy on analytical tasks.
+
+**Real-World Example - Customer Lifetime Value Calculation:**
+
+```
+Prompt:
+"Calculate the customer lifetime value and explain your reasoning step by step.
+
+Customer Data:
+- Average monthly purchase: $150
+- Purchase frequency: 4 times per year
+- Customer lifespan: 5 years
+- Marketing cost per customer: $200
+- Product margin: 40%
+
+Show your work:"
+```
+
+**Output:**
+1. Annual revenue per customer = $150 × 4 = $600
+2. Total lifetime revenue = $600 × 5 = $3,000
+3. Gross margin (40%) = $3,000 × 0.40 = $1,200
+4. Subtract marketing cost = $1,200 - $200 = $1,000
+5. **Customer Lifetime Value = $1,000**
+
+**Why it works:** Breaking down the calculation helps catch errors and shows stakeholders the logic behind the number.
+
+---
+
+### 5. Tree of Thought - High Complexity
+
+**What it is:** Exploring multiple reasoning paths in parallel, then evaluating and selecting the best approach.
+
+**Real-World Example - Strategic Business Decision:**
+
+```
+Prompt:
+"A mid-sized software company has 3 potential growth strategies. Evaluate 
+each and recommend the best option.
+
+Option A: Expand into European markets
+- Pros: Large market, strong dollar
+- Cons: Regulatory complexity, 18-month setup
+- Investment: $2M
+
+Option B: Acquire a competitor
+- Pros: Instant market share, existing team
+- Cons: Integration risk, $5M cost
+- Investment: $5M
+
+Option C: Launch new product line
+- Pros: Leverages existing customers, lower risk
+- Cons: May dilute focus, 12-month development
+- Investment: $1.5M
+
+For each option, analyze: Market potential, Risk level, Resource requirements, 
+and Timeline. Then recommend the best choice with reasoning."
+```
+
+**Output:**
+**Option A (Europe):** Medium potential, Medium risk, High resources, Long timeline → 6/10
+**Option B (Acquisition):** High potential, High risk, High resources, Fast timeline → 7/10
+**Option C (New Product):** Medium potential, Low risk, Medium resources, Medium timeline → 8/10
+
+**Recommendation:** Option C - Best risk-adjusted return
+
+**Why it works:** Exploring multiple paths reveals trade-offs that single-path thinking misses.
+
+---
+
+### 6. Prompt Chaining - High Complexity
+
+**What it is:** Breaking complex tasks into sequential steps where each AI response feeds into the next.
+
+**Real-World Example - Quarterly Business Review Report:**
+
+```
+Step 1 Prompt:
+"Analyze this sales data and identify:
+- Top 5 performing products
+- 3 biggest decline categories
+- Regional performance summary
+
+Sales Data:
+[Quarterly sales numbers here]"
+
+Step 2 Prompt (uses Step 1 output):
+"Based on this analysis:
+[Step 1 results]
+
+Create a presentation outline for the executive team highlighting key insights 
+and 3 actionable recommendations."
+
+Step 3 Prompt (uses Step 2 output):
+"Here are our quarterly findings and recommendations:
+[Step 2 outline]
+
+Draft the full QBR presentation with:
+- 5-slide structure
+- Key metrics for each slide
+- Speaker notes for the CEO"
+```
+
+**Why it works:** Breaking into steps prevents the AI from getting overwhelmed and allows human review between stages.
+
+---
+
+## When to Use Which Technique
+
+| Scenario | Recommended Technique |
+|----------|----------------------|
+| Need specific tone/voice | Role Prompting |
+| Simple classification | Zero-Shot |
+| Need specific format | Few-Shot |
+| Calculations or analysis | Chain-of-Thought |
+| Strategic planning | Tree of Thought |
+| Complex multi-step process | Prompt Chaining |
 
 ### Common Success Factors
 
