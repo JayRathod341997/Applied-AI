@@ -1,5 +1,5 @@
 // Exact mirrors of the backend state.py literals
-export type IssueType = 'billing' | 'technical' | 'general'
+export type IssueType = 'billing' | 'technical' | 'general' | 'greeting'
 export type Severity = 'low' | 'medium' | 'high' | 'critical'
 export type SupportStatus = 'open' | 'resolving' | 'resolved' | 'escalated'
 
@@ -36,4 +36,14 @@ export function isWsError(msg: WsServerMessage): msg is WsErrorMessage {
 export interface HealthResponse {
   status: 'ok'
   service: string
+}
+
+export interface HistoryItem {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp?: string
+  issue_type?: IssueType | null
+  severity?: Severity | null
+  status?: SupportStatus | null
 }

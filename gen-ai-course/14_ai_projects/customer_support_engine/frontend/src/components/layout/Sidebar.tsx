@@ -1,5 +1,6 @@
-import { MessageSquare, History, BarChart3, Settings, Plus } from 'lucide-react'
+import { MessageSquare, History, BarChart3, Settings, Plus, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { DeleteConversationDialog } from '@/components/shared/DeleteConversationDialog'
 import { SidebarItem } from './SidebarItem'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -85,13 +86,24 @@ export function Sidebar({ collapsed }: Props) {
           <ScrollArea className="flex-1">
             <div className="flex flex-col gap-0.5 px-2 pb-2">
               {recentConversations.map((conv) => (
-                <button
+                <div
                   key={conv.id}
                   onClick={() => void navigate(ROUTES.CHAT)}
-                  className="flex flex-col gap-1 rounded-md px-3 py-2 text-left hover:bg-accent transition-colors"
+                  className="group relative flex flex-col gap-1 rounded-md px-3 py-2 text-left hover:bg-accent transition-colors cursor-pointer"
                 >
-                  <p className="text-xs text-foreground leading-snug">
-                    {truncate(conv.firstMessage, 48)}
+                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <DeleteConversationDialog conversation={conv}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </DeleteConversationDialog>
+                  </div>
+                  <p className="text-xs text-foreground leading-snug pr-6">
+                    {truncate(conv.firstMessage || (conv.messages && conv.messages[0]?.content) || 'New Conversation', 48)}
                   </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <IssueTypeBadge issueType={conv.issueType} />
@@ -100,7 +112,7 @@ export function Sidebar({ collapsed }: Props) {
                       {formatRelativeTime(conv.updatedAt)}
                     </span>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </ScrollArea>

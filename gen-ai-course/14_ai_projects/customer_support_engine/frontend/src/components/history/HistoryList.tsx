@@ -11,7 +11,7 @@ import { History } from 'lucide-react'
 
 export function HistoryList() {
   const navigate = useNavigate()
-  const { conversations, totalCount, searchQuery, setSearchQuery, filters, setFilters, clearFilters, deleteConversation } =
+  const { conversations, totalCount, searchQuery, setSearchQuery, filters, setFilters, clearFilters } =
     useConversationHistory()
   const { loadConversation } = useConversation()
 
@@ -20,10 +20,12 @@ export function HistoryList() {
     if (!conv) return
     loadConversation({
       id: conv.id,
+      firstMessage: conv.firstMessage,
       messages: conv.messages,
       issueType: conv.issueType,
       severity: conv.severity,
       status: conv.status,
+      messageCount: conv.messageCount,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
     })
@@ -67,7 +69,6 @@ export function HistoryList() {
                   key={conv.id}
                   conversation={conv}
                   onClick={() => handleOpen(conv.id)}
-                  onDelete={deleteConversation}
                 />
               ))}
             </div>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from datetime import datetime, timezone
@@ -78,14 +79,25 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
     ) -> Dict[str, Any]:
         thread_id = config["configurable"]["thread_id"]
         ts = checkpoint["ts"]
+        
+        # Serialize checkpoint and metadata using the new typed API
+        cp_type, cp_bytes = self.serde.dumps_typed(checkpoint)
+        meta_type, meta_bytes = self.serde.dumps_typed(metadata)
+
         return {
             "id": self._doc_id(thread_id, ts),
+            "type": "checkpoint",
             "thread_id": thread_id,
+            "checkpoint_id": checkpoint["id"],
             "ts": ts,
-            "checkpoint": self.serde.dumps(checkpoint).decode("utf-8")
-            if isinstance(self.serde.dumps(checkpoint), bytes)
-            else json.dumps(checkpoint),
-            "metadata": json.dumps(metadata) if metadata else "{}",
+            "checkpoint": {
+                "type": cp_type,
+                "data": base64.b64encode(cp_bytes).decode("utf-8")
+            },
+            "metadata": {
+                "type": meta_type,
+                "data": base64.b64encode(meta_bytes).decode("utf-8")
+            },
             "saved_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -93,12 +105,29 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
         self, doc: Dict[str, Any]
     ) -> Tuple[Checkpoint, CheckpointMetadata]:
         raw_cp = doc["checkpoint"]
-        checkpoint: Checkpoint = (
-            self.serde.loads(raw_cp.encode("utf-8"))
-            if hasattr(self.serde, "loads")
-            else json.loads(raw_cp)
-        )
-        metadata: CheckpointMetadata = json.loads(doc.get("metadata", "{}"))
+        raw_meta = doc.get("metadata")
+
+        # Handle new format (dict with type and data)
+        if isinstance(raw_cp, dict) and "type" in raw_cp and "data" in raw_cp:
+            cp_type = raw_cp["type"]
+            cp_bytes = base64.b64decode(raw_cp["data"])
+            checkpoint = self.serde.loads_typed((cp_type, cp_bytes))
+        else:
+            # Fallback for old format (string)
+            checkpoint = (
+                self.serde.loads(raw_cp.encode("utf-8"))
+                if hasattr(self.serde, "loads")
+                else json.loads(raw_cp)
+            )
+
+        if isinstance(raw_meta, dict) and "type" in raw_meta and "data" in raw_meta:
+            meta_type = raw_meta["type"]
+            meta_bytes = base64.b64decode(raw_meta["data"])
+            metadata = self.serde.loads_typed((meta_type, meta_bytes))
+        else:
+            # Fallback for old format (string)
+            metadata = json.loads(raw_meta) if raw_meta else {}
+
         return checkpoint, metadata
 
     # ------------------------------------------------------------------
@@ -115,28 +144,74 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
                 doc_id = self._doc_id(thread_id, thread_ts)
                 doc = self._container.read_item(item=doc_id, partition_key=thread_id)
                 checkpoint, metadata = self._from_doc(doc)
+                
+                # Fetch pending writes
+                writes_query = (
+                    "SELECT * FROM c WHERE c.thread_id = @tid "
+                    "AND c.checkpoint_id = @cid AND c.type = 'write'"
+                )
+                writes_items = self._container.query_items(
+                    query=writes_query,
+                    parameters=[
+                        {"name": "@tid", "value": thread_id},
+                        {"name": "@cid", "value": checkpoint["id"]},
+                    ],
+                    partition_key=thread_id,
+                )
+                pending_writes = []
+                for wdoc in writes_items:
+                    raw_v = wdoc["value"]
+                    v_type = raw_v["type"]
+                    v_bytes = base64.b64decode(raw_v["data"])
+                    value = self.serde.loads_typed((v_type, v_bytes))
+                    pending_writes.append((wdoc["task_id"], wdoc["channel"], value))
+
                 return CheckpointTuple(
                     config=config,
                     checkpoint=checkpoint,
                     metadata=metadata,
+                    pending_writes=pending_writes,
                 )
 
             # No specific ts → fetch the most recent checkpoint
             query = (
                 "SELECT TOP 1 * FROM c WHERE c.thread_id = @tid "
+                "AND c.type = 'checkpoint' "
                 "ORDER BY c.ts DESC"
             )
             items = list(
                 self._container.query_items(
                     query=query,
                     parameters=[{"name": "@tid", "value": thread_id}],
-                    enable_cross_partition_query=False,
+                    partition_key=thread_id,
                 )
             )
             if not items:
                 return None
 
             checkpoint, metadata = self._from_doc(items[0])
+            
+            # Fetch pending writes
+            writes_query = (
+                "SELECT * FROM c WHERE c.thread_id = @tid "
+                "AND c.checkpoint_id = @cid AND c.type = 'write'"
+            )
+            writes_items = self._container.query_items(
+                query=writes_query,
+                parameters=[
+                    {"name": "@tid", "value": thread_id},
+                    {"name": "@cid", "value": checkpoint["id"]},
+                ],
+                partition_key=thread_id,
+            )
+            pending_writes = []
+            for wdoc in writes_items:
+                raw_v = wdoc["value"]
+                v_type = raw_v["type"]
+                v_bytes = base64.b64decode(raw_v["data"])
+                value = self.serde.loads_typed((v_type, v_bytes))
+                pending_writes.append((wdoc["task_id"], wdoc["channel"], value))
+
             return CheckpointTuple(
                 config={
                     "configurable": {
@@ -146,6 +221,7 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
                 },
                 checkpoint=checkpoint,
                 metadata=metadata,
+                pending_writes=pending_writes,
             )
 
         except exceptions.CosmosResourceNotFoundError:
@@ -168,16 +244,39 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
 
         query = (
             f"SELECT {top_clause} * FROM c WHERE c.thread_id = @tid "
+            "AND c.type = 'checkpoint' "
             "ORDER BY c.ts DESC"
         )
         try:
             items = self._container.query_items(
                 query=query,
                 parameters=[{"name": "@tid", "value": thread_id}],
-                enable_cross_partition_query=False,
+                partition_key=thread_id,
             )
             for doc in items:
                 checkpoint, metadata = self._from_doc(doc)
+                
+                # Fetch pending writes
+                writes_query = (
+                    "SELECT * FROM c WHERE c.thread_id = @tid "
+                    "AND c.checkpoint_id = @cid AND c.type = 'write'"
+                )
+                writes_items = self._container.query_items(
+                    query=writes_query,
+                    parameters=[
+                        {"name": "@tid", "value": thread_id},
+                        {"name": "@cid", "value": checkpoint["id"]},
+                    ],
+                    partition_key=thread_id,
+                )
+                pending_writes = []
+                for wdoc in writes_items:
+                    raw_v = wdoc["value"]
+                    v_type = raw_v["type"]
+                    v_bytes = base64.b64decode(raw_v["data"])
+                    value = self.serde.loads_typed((v_type, v_bytes))
+                    pending_writes.append((wdoc["task_id"], wdoc["channel"], value))
+
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -187,6 +286,7 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
                     },
                     checkpoint=checkpoint,
                     metadata=metadata,
+                    pending_writes=pending_writes,
                 )
         except Exception as exc:
             logger.error("list checkpoints failed: %s", exc, exc_info=True)
@@ -212,3 +312,54 @@ class CosmosDBCheckpointer(BaseCheckpointSaver):
                 "thread_ts": checkpoint["ts"],
             }
         }
+
+    def put_writes(
+        self,
+        config: Dict[str, Any],
+        writes: Sequence[Tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
+    ) -> None:
+        """Store intermediate writes linked to a checkpoint."""
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+
+        for idx, (channel, value) in enumerate(writes):
+            # Using a deterministic index for storage
+            write_id = f"write_{thread_id}_{checkpoint_id}_{task_id}_{idx}"
+
+            # Serialize value using the new typed API
+            v_type, v_bytes = self.serde.dumps_typed(value)
+
+            doc = {
+                "id": write_id,
+                "type": "write",
+                "thread_id": thread_id,
+                "checkpoint_id": checkpoint_id,
+                "task_id": task_id,
+                "channel": channel,
+                "value": {
+                    "type": v_type,
+                    "data": base64.b64encode(v_bytes).decode("utf-8")
+                },
+                "task_path": task_path,
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+            }
+            try:
+                self._container.upsert_item(doc)
+            except Exception as exc:
+                logger.error("put_writes failed: %s", exc, exc_info=True)
+
+    def delete_conversation(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes for a given thread_id."""
+        query = "SELECT c.id FROM c WHERE c.thread_id = @tid"
+        try:
+            items = self._container.query_items(
+                query=query,
+                parameters=[{"name": "@tid", "value": thread_id}],
+                partition_key=thread_id,
+            )
+            for item in items:
+                self._container.delete_item(item["id"], partition_key=thread_id)
+        except Exception as exc:
+            logger.error("delete_conversation failed: %s", exc, exc_info=True)

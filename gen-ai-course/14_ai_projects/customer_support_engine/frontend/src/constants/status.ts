@@ -33,4 +33,8 @@ export const ISSUE_TYPE_CONFIG: Record<IssueType, { label: string; className: st
     label: 'General',
     className: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   },
+  greeting: {
+    label: 'Greeting',
+    className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  },
 }

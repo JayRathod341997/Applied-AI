@@ -23,8 +23,21 @@ def route_after_classifier(
         "billing": "billing_retrieval",
         "technical": "technical_retrieval",
         "general": "general_retrieval",
+        "greeting": "response_generator",
     }
     return routes.get(issue_type, "general_retrieval")  # type: ignore[return-value]
+
+
+def route_after_response(
+    state: SupportState,
+) -> Literal["feedback_evaluator", "__end__"]:
+    """
+    Decide whether to run feedback evaluation.
+    Greetings skip feedback and just end.
+    """
+    if state.get("issue_type") == "greeting":
+        return "__end__"
+    return "feedback_evaluator"
 
 
 def route_after_feedback(

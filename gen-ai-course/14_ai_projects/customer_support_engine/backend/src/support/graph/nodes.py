@@ -6,7 +6,7 @@ import json
 import logging
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import AzureChatOpenAI
+from langchain_groq import ChatGroq
 
 from support.config import settings
 from support.graph.state import SupportState
@@ -16,12 +16,10 @@ from support.tools.kb_search import KnowledgeBaseSearch
 logger = logging.getLogger(__name__)
 
 
-def _get_llm() -> AzureChatOpenAI:
-    return AzureChatOpenAI(
-        azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
-        api_key=settings.AZURE_OPENAI_KEY,
-        azure_deployment=settings.AZURE_OPENAI_DEPLOYMENT,
-        api_version="2024-02-01",
+def _get_llm() -> ChatGroq:
+    return ChatGroq(
+        api_key=settings.GROQ_API_KEY,
+        model="llama-3.3-70b-versatile",
         temperature=0,
     )
 
@@ -39,13 +37,29 @@ def classifier_node(state: SupportState) -> dict:
         None,
     )
     user_text = last_human.content if last_human else ""
+    user_text_lower = user_text.lower().strip().strip("!?,.")
+
+    # Fast-path for very common single-word greetings
+    if user_text_lower in ["hello", "hi", "hey", "greetings", "hi there", "hello there"]:
+        return {
+            "issue_type": "greeting",
+            "severity": None,
+            "kb_chunks": [],
+            "resolution_steps": [],
+            "retry_count": 0,
+            "feedback_signal": None,
+        }
 
     system_prompt = (
         "You are a customer support classifier. "
-        "Given the user message below, respond ONLY with a JSON object containing "
-        "exactly two keys:\n"
-        '  "issue_type": one of ["billing", "technical", "general"]\n'
-        '  "severity": one of ["low", "medium", "high", "critical"]\n'
+        "Analyze the user message for intent and categorize it into exactly one of these types:\n"
+        "- 'greeting': For simple greetings like 'hello', 'hi', 'hey', 'good morning', etc.\n"
+        "- 'billing': For questions about payments, invoices, or subscriptions.\n"
+        "- 'technical': For reporting bugs or technical system issues.\n"
+        "- 'general': For other support questions or when the category is unclear.\n\n"
+        "Respond ONLY with a JSON object like this:\n"
+        '{"issue_type": "greeting", "severity": null}  '
+        '(Note: for greetings, severity must be null. For others, choose one of ["low", "medium", "high", "critical"].)\n'
         "Do not include any other text."
     )
 
@@ -53,10 +67,16 @@ def classifier_node(state: SupportState) -> dict:
         [SystemMessage(content=system_prompt), HumanMessage(content=user_text)]
     )
 
+    content = response.content.strip()
+    if content.startswith("```json"):
+        content = content[7:-3].strip()
+    elif content.startswith("```"):
+        content = content[3:-3].strip()
+
     try:
-        data = json.loads(response.content.strip())
+        data = json.loads(content)
         issue_type = data.get("issue_type", "general")
-        severity = data.get("severity", "low")
+        severity = data.get("severity")
     except (json.JSONDecodeError, AttributeError):
         logger.warning("Classifier returned non-JSON response; defaulting to general/low.")
         issue_type = "general"
@@ -67,8 +87,10 @@ def classifier_node(state: SupportState) -> dict:
     return {
         "issue_type": issue_type,
         "severity": severity,
-        "status": "resolving",
-        "messages": [AIMessage(content=f"[Classifier] issue_type={issue_type}, severity={severity}")],
+        "kb_chunks": [],
+        "resolution_steps": [],
+        "retry_count": 0,
+        "feedback_signal": None,
     }
 
 
@@ -165,17 +187,25 @@ def response_generator_node(state: SupportState) -> dict:
     severity = state.get("severity", "low")
     steps_text = "\n".join(steps) if steps else "No resolution steps available."
 
-    system_prompt = (
-        "You are a friendly and professional customer support agent. "
-        "Given the resolution steps below, write a warm, concise response addressed "
-        "directly to the customer. Do not use bullet points; write in natural prose. "
-        "End with an offer to help further."
-    )
-
-    user_prompt = (
-        f"Issue type: {issue_type} | Severity: {severity}\n\n"
-        f"Resolution steps:\n{steps_text}"
-    )
+    if issue_type == "greeting":
+        system_prompt = (
+            "You are a friendly customer support assistant. "
+            "Greet the customer warmly and briefly mention that you can help with "
+            "billing inquiries, technical troubleshooting, and general product questions. "
+            "Ask how you can assist them today."
+        )
+        user_prompt = f"The customer said: {state['messages'][-1].content}"
+    else:
+        system_prompt = (
+            "You are a friendly and professional customer support agent. "
+            "Given the resolution steps below, write a warm, concise response addressed "
+            "directly to the customer. Do not use bullet points; write in natural prose. "
+            "End with an offer to help further."
+        )
+        user_prompt = (
+            f"Issue type: {issue_type} | Severity: {severity or 'N/A'}\n\n"
+            f"Resolution steps:\n{steps_text}"
+        )
 
     response = llm.invoke(
         [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
@@ -186,7 +216,7 @@ def response_generator_node(state: SupportState) -> dict:
 
     return {
         "messages": [AIMessage(content=reply)],
-        "status": "resolved",
+        "status": "resolved" if issue_type != "greeting" else "open",
     }
 
 
@@ -221,8 +251,14 @@ def feedback_evaluator_node(state: SupportState) -> dict:
         [SystemMessage(content=system_prompt), HumanMessage(content=feedback_text)]
     )
 
+    content = response.content.strip()
+    if content.startswith("```json"):
+        content = content[7:-3].strip()
+    elif content.startswith("```"):
+        content = content[3:-3].strip()
+
     try:
-        data = json.loads(response.content.strip())
+        data = json.loads(content)
         signal = data.get("signal", "helpful")
     except (json.JSONDecodeError, AttributeError):
         signal = "helpful"

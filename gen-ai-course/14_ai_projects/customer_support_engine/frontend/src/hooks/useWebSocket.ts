@@ -50,19 +50,13 @@ export function useWebSocket(conversationId: string | null) {
         status: data.status,
       })
 
-      // Read current state directly — avoids subscribing to activeConversation
       const conv = useConversationStore.getState().activeConversation
       if (conv) {
+        // conv already includes assistantMsg because appendMessage is sync
         upsertConversation({
-          id: conv.id,
-          firstMessage: conv.messages[0]?.content ?? '',
-          issueType: data.issue_type,
-          severity: data.severity,
-          status: data.status,
-          messageCount: conv.messages.length + 1,
-          createdAt: conv.createdAt,
+          ...conv,
+          messageCount: conv.messages.length,
           updatedAt: assistantMsg.timestamp,
-          messages: [...conv.messages, assistantMsg],
         })
       }
     },

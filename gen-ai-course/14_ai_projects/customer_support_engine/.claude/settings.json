@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node node_modules/tailwindcss/lib/cli.js init -p)",
+      "Bash(npm run:*)",
+      "Bash(uv run:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/pip.exe install:*)",
+      "Bash(\"/d/Jay Rathod/Tutorials/Applied AI/gen-ai-course/14_ai_projects/customer_support_engine/backend/.venv/Scripts/python.exe\" -m pip install langchain-groq)",
+      "Bash(uv --version)",
+      "Bash(uv add:*)",
+      "Bash(ls \"/d/Jay Rathod/Tutorials/Applied AI/gen-ai-course/14_ai_projects/customer_support_engine/backend/\"*.env)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ --tb=short)"
+    ]
+  }
+}

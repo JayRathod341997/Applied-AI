@@ -13,24 +13,16 @@ export interface Message {
 
 export interface Conversation {
   id: string
-  messages: Message[]
-  issueType: IssueType | null
-  severity: Severity | null
-  status: SupportStatus | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface StoredConversation {
-  id: string
   firstMessage: string
+  messages: Message[]
   issueType: IssueType | null
   severity: Severity | null
   status: SupportStatus | null
   messageCount: number
   createdAt: string
   updatedAt: string
-  messages: Message[]
 }
+
+export interface StoredConversation extends Conversation {}
 
 export type WsStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed' | 'error'

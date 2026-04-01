@@ -3,20 +3,16 @@ import { Button } from '@/components/ui/button'
 import { IssueTypeBadge } from '@/components/shared/IssueTypeBadge'
 import { SeverityBadge } from '@/components/shared/SeverityBadge'
 import { StatusChip } from '@/components/shared/StatusChip'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
+import { DeleteConversationDialog } from '@/components/shared/DeleteConversationDialog'
 import { formatRelativeTime, truncate } from '@/lib/utils'
 import type { StoredConversation } from '@/types/conversation'
 
 interface Props {
   conversation: StoredConversation
   onClick: () => void
-  onDelete: (id: string) => void
 }
 
-export function HistoryCard({ conversation: conv, onClick, onDelete }: Props) {
+export function HistoryCard({ conversation: conv, onClick }: Props) {
   return (
     <div
       className="group flex items-start gap-4 rounded-lg border bg-card p-4 hover:shadow-sm transition-all cursor-pointer"
@@ -40,35 +36,16 @@ export function HistoryCard({ conversation: conv, onClick, onDelete }: Props) {
         </div>
       </div>
 
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-muted-foreground hover:text-destructive"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove this conversation from your history.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => onDelete(conv.id)}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteConversationDialog conversation={conv}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0 text-muted-foreground hover:text-destructive focus:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </DeleteConversationDialog>
     </div>
   )
 }
+

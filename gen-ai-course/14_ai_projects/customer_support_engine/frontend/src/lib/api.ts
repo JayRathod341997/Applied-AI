@@ -1,19 +1,11 @@
 import axios from 'axios'
-import type { StartRequest, StartResponse, HealthResponse } from '@/types/api'
+import type { StartRequest, StartResponse, HealthResponse, HistoryItem } from '@/types/api'
+import { useSettingsStore } from '@/store/settingsStore'
 
 // Read baseURL lazily so Settings changes take effect without a page reload
 function getBaseUrl(): string {
-  try {
-    const raw = localStorage.getItem('cse-settings')
-    if (raw) {
-      const parsed = JSON.parse(raw) as { state?: { apiBaseUrl?: string } }
-      const url = parsed?.state?.apiBaseUrl
-      if (url) return url.replace(/\/$/, '')
-    }
-  } catch {
-    // ignore
-  }
-  return import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8003'
+  const url = useSettingsStore.getState().apiBaseUrl
+  return url.replace(/\/$/, '')
 }
 
 const client = axios.create({ timeout: 30_000 })
@@ -43,6 +35,16 @@ client.interceptors.response.use(
 export const supportApi = {
   start: async (data: StartRequest): Promise<StartResponse> => {
     const res = await client.post<StartResponse>('/support/start', data)
+    return res.data
+  },
+
+  history: async (conversationId: string): Promise<HistoryItem[]> => {
+    const res = await client.get<HistoryItem[]>(`/support/history/${conversationId}`)
+    return res.data
+  },
+
+  deleteHistory: async (conversationId: string): Promise<{ status: string; message: string }> => {
+    const res = await client.delete<{ status: string; message: string }>(`/support/history/${conversationId}`)
     return res.data
   },
 

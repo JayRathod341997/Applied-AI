@@ -11,7 +11,7 @@ class SupportState(TypedDict):
     messages: Annotated[list, add_messages]
 
     # Classification results
-    issue_type: Literal["billing", "technical", "general"] | None
+    issue_type: Literal["billing", "technical", "general", "greeting"] | None
     severity: Literal["low", "medium", "high", "critical"] | None
 
     # Knowledge retrieval

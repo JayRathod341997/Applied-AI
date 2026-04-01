@@ -9,10 +9,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Azure OpenAI
-    AZURE_OPENAI_ENDPOINT: str
-    AZURE_OPENAI_KEY: str
-    AZURE_OPENAI_DEPLOYMENT: str = "gpt-4o"
+    # Groq
+    GROQ_API_KEY: str
 
     # Azure AI Search
     AZURE_SEARCH_ENDPOINT: str

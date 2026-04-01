@@ -47,8 +47,16 @@ export function useConversation() {
         setIsTyping(true)
         setError(null)
 
+        // Generate ID ahead of time for optimistic update
+        const cid = conversationId || generateId()
+        setConversationId(cid)
+        startConversation(cid, userMsg, null) // Optimistic start
+
         try {
-          const res = await supportApi.start({ message: text.trim() })
+          const res = await supportApi.start({
+            message: text.trim(),
+            conversation_id: cid,
+          })
 
           const assistantMsg: Message = {
             id: generateId(),
@@ -60,13 +68,14 @@ export function useConversation() {
             status: res.status,
           }
 
-          startConversation(res.conversation_id, userMsg, assistantMsg, {
+          // Complete the optimistic start with assistant response
+          updateMeta({
             issueType: res.issue_type,
             severity: res.severity,
             status: res.status,
           })
-
-          setConversationId(res.conversation_id)
+          appendMessage(assistantMsg)
+          setIsTyping(false)
           isFirstMessage.current = false
 
           upsertConversation({
@@ -89,9 +98,20 @@ export function useConversation() {
         setIsTyping(true)
         setError(null)
 
+        // Update local history message count optimistically
+        const updatedCount = (currentConv.messages.length || 0) + 1
+        upsertConversation({
+          ...currentConv,
+          firstMessage: currentConv.firstMessage || currentConv.messages[0]?.content || text.trim(),
+          messages: [...currentConv.messages, userMsg],
+          messageCount: updatedCount,
+          updatedAt: userMsg.timestamp,
+        })
+
         const currentWsStatus = useConversationStore.getState().wsStatus
         if (currentWsStatus === 'open') {
           wsSend(text.trim())
+          // Note: WebSocket response handling should also call upsertConversation to keep count accurate
         } else {
           // Fallback to REST if WebSocket isn't ready
           try {
@@ -115,6 +135,18 @@ export function useConversation() {
               severity: res.severity,
               status: res.status,
             })
+
+            // Update local history with assistant response
+            const finalCount = updatedCount + 1
+            upsertConversation({
+              ...currentConv,
+              messages: [...currentConv.messages, userMsg, assistantMsg],
+              messageCount: finalCount,
+              updatedAt: assistantMsg.timestamp,
+              issueType: res.issue_type,
+              severity: res.severity,
+              status: res.status,
+            })
           } catch (err) {
             setIsTyping(false)
             setError((err as { message?: string })?.message ?? 'Failed to send message')
@@ -123,7 +155,16 @@ export function useConversation() {
       }
     },
     // Stable action refs from Zustand — these never change identity
-    [startConversation, appendMessage, updateMeta, setIsTyping, setError, upsertConversation, wsSend]
+    [
+      conversationId,
+      startConversation,
+      appendMessage,
+      updateMeta,
+      setIsTyping,
+      setError,
+      upsertConversation,
+      wsSend,
+    ]
   )
 
   const resetConversation = useCallback(() => {
@@ -133,10 +174,33 @@ export function useConversation() {
   }, [reset])
 
   const loadConversation = useCallback(
-    (conv: Parameters<typeof loadConversationAction>[0]) => {
+    async (conv: Parameters<typeof loadConversationAction>[0]) => {
       loadConversationAction(conv)
       setConversationId(conv.id)
       isFirstMessage.current = false
+
+      // Sync with backend history if possible
+      try {
+        const history = await supportApi.history(conv.id)
+        if (history.length > 0) {
+          const mappedMessages: Message[] = history.map((h) => ({
+            id: h.id,
+            role: h.role as 'user' | 'assistant',
+            content: h.content,
+            timestamp: h.timestamp || new Date().toISOString(),
+            issueType: h.issue_type,
+            severity: h.severity,
+            status: h.status,
+          }))
+
+          loadConversationAction({
+            ...conv,
+            messages: mappedMessages,
+          })
+        }
+      } catch (err) {
+        console.error('Failed to sync history:', err)
+      }
     },
     [loadConversationAction]
   )

@@ -14,7 +14,7 @@ interface ConversationState {
   isTyping: boolean
   error: string | null
 
-  startConversation: (id: string, userMsg: Message, assistantMsg: Message, meta: ConversationMeta) => void
+  startConversation: (id: string, userMsg: Message, assistantMsg?: Message | null, meta?: Partial<ConversationMeta>) => void
   appendMessage: (message: Message) => void
   updateMeta: (meta: Partial<ConversationMeta>) => void
   setWsStatus: (status: WsStatus) => void
@@ -34,12 +34,16 @@ export const useConversationStore = create<ConversationState>()((set) => ({
     set({
       activeConversation: {
         id,
-        messages: [userMsg, assistantMsg],
-        ...meta,
+        firstMessage: userMsg.content,
+        messages: assistantMsg ? [userMsg, assistantMsg] : [userMsg],
+        issueType: meta?.issueType ?? null,
+        severity: meta?.severity ?? null,
+        status: meta?.status ?? 'open',
+        messageCount: assistantMsg ? 2 : 1,
         createdAt: userMsg.timestamp,
-        updatedAt: assistantMsg.timestamp,
+        updatedAt: assistantMsg?.timestamp ?? userMsg.timestamp,
       },
-      isTyping: false,
+      isTyping: assistantMsg ? false : true,
       error: null,
     }),
 
