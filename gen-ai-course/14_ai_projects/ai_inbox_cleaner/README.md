@@ -1,5 +1,7 @@
 # AI Inbox Cleaner
 
+**AI Inbox Cleaner Agent**: _Monitors designated Gmail inboxes, intelligently filters and tags emails related to security jobs, real estate leads, client communications, and job applications. Archives spam/irrelevant messages and potentially drafts simple replies for approval._
+
 ## Overview
 
 Gmail email classifier and auto-organizer that uses LLM-powered categorization to sort, label, and draft replies for incoming emails. Integrates with Notion CRM and Slack for seamless workflow automation.
@@ -69,18 +71,49 @@ New email: {
 
 1. `cd ai_inbox_cleaner && uv venv && uv sync`
 2. Set `GROQ_API_KEY` from console.groq.com
-3. Create GCP project -> Enable Gmail API -> Create OAuth2 credentials -> Set `GOOGLE_SERVICE_ACCOUNT_JSON`, `GMAIL_USER_EMAIL`
+3. Create GCP project -> Enable Gmail API -> Create OAuth2 credentials (Desktop App) -> Download JSON and set `GOOGLE_CLIENT_SECRETS_JSON` (defaults to `credentials.json`)
 4. Set `NOTION_API_KEY` + relevant DB IDs
 5. Set `SLACK_WEBHOOK_URL`
 6. `cp .env.example .env` -> Fill all keys
 7. `uv run uvicorn src.inbox_cleaner.main:app --reload --port 8018`
 8. `curl -X POST http://localhost:8018/sync/trigger`
 
+
+## Setup with Notion
+1. Go to https://www.notion.so/profile/integrations
+2. Click + New integration
+3. Select workspace, name it AI Inbox Cleaner, then create it
+4. Open the integration details page
+5. Click Show / Reveal under Internal Integration Token
+6. Copy token and set in .env:
+
+## Setup with Slack
+1. Go to https://api.slack.com/apps
+2. Click Create New App -> From scratch
+3. App name: AI Inbox Cleaner (or similar), pick your workspace
+4. In left menu, open Incoming Webhooks
+5. Turn Activate Incoming Webhooks ON
+6. Click Add New Webhook to Workspace
+7. Choose the channel (for example #job-alerts) and allow
+8. Copy the generated webhook URL
+9. Put it in .env:
+
+## Setup with Gmail
+1. Go to Google Cloud Console
+2. Top navbar → choose your project (or create a new one)
+3. APIs & Services → OAuth consent screen -> Configure consent screen (External)
+4. Add the `https://www.googleapis.com/auth/gmail.modify` scope
+5. Add your `@gmail.com` email to the Test users list and Save
+6. APIs & Services → Credentials → Create Credentials → OAuth client ID
+7. Application type: **Desktop app**, Name: "AI Inbox Cleaner"
+8. Click Create and then Download JSON
+9. Save the downloaded file as `credentials.json` in the root of the project (or set the `GOOGLE_CLIENT_SECRETS_JSON` env variable).
+
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GROQ_API_KEY` | Yes | Groq API key |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes | Path to Google service account JSON |
-| `GMAIL_USER_EMAIL` | Yes | Gmail address to monitor |
+| `GOOGLE_CLIENT_SECRETS_JSON` | No | Path to Google OAuth client secrets JSON (defaults to `credentials.json`) |
+| `GMAIL_USER_EMAIL` | No | Gmail address to monitor (defaults to `me`) |
 | `SLACK_WEBHOOK_URL` | No | Slack webhook for alerts |

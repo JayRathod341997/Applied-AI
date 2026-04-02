@@ -9,16 +9,41 @@ class GmailTool:
         self._init_service()
 
     def _init_service(self):
+        # Initialize Gmail API client using OAuth 2.0 flow.
         try:
-            from google.oauth2 import service_account
+            import os
+            from google.auth.transport.requests import Request
+            from google.oauth2.credentials import Credentials
+            from google_auth_oauthlib.flow import InstalledAppFlow
             from googleapiclient.discovery import build
 
-            if settings.google_service_account_json:
-                credentials = service_account.Credentials.from_service_account_file(
-                    settings.google_service_account_json,
-                    scopes=["https://www.googleapis.com/auth/gmail.modify"],
-                )
-                self.service = build("gmail", "v1", credentials=credentials)
+            SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+            creds = None
+            
+            # The file token.json stores the user's access and refresh tokens, and is
+            # created automatically when the authorization flow completes for the first time.
+            if os.path.exists("token.json"):
+                creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+            
+            # If there are no (valid) credentials available, let the user log in.
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    if os.path.exists(settings.google_client_secrets_json):
+                        flow = InstalledAppFlow.from_client_secrets_file(
+                            settings.google_client_secrets_json, SCOPES
+                        )
+                        creds = flow.run_local_server(port=0)
+                    else:
+                        logger.warning("No client secrets file found at %s. Please download it from Google Cloud Console.", settings.google_client_secrets_json)
+                        return
+                        
+                # Save the credentials for the next run
+                with open("token.json", "w") as token:
+                    token.write(creds.to_json())
+
+            self.service = build("gmail", "v1", credentials=creds)
         except Exception as e:
             logger.warning(f"Gmail not configured: {e}")
 

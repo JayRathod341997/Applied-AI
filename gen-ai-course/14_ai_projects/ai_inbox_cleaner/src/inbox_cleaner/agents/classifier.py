@@ -4,6 +4,7 @@ from typing import Dict
 from ..config import settings
 from ..utils.logger import logger
 import json
+from ..models import EmailClassification
 
 
 CLASSIFICATION_PROMPT = """Classify this email into one of these categories:
@@ -46,8 +47,9 @@ class ClassifierAgent:
             body_snippet=body[:1000],
         )
         try:
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            return json.loads(response.content)
+            structured_llm = self.llm.with_structured_output(EmailClassification)
+            response = await structured_llm.ainvoke([HumanMessage(content=prompt)])
+            return response.model_dump() if hasattr(response, 'model_dump') else response.dict()
         except Exception as e:
             logger.error(f"Classification failed: {e}")
             return {

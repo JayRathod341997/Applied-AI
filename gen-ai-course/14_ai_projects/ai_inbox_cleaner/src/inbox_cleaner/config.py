@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     groq_model_fast: str = "llama-3.1-8b-instant"
 
     # Google
-    google_service_account_json: str = ""
-    gmail_user_email: str = ""
+    google_client_secrets_json: str = "credentials.json"
+    gmail_user_email: str = "me"
 
     # Notion
     notion_api_key: str = ""
