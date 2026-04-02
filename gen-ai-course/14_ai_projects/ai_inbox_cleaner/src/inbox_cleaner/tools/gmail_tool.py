@@ -86,6 +86,31 @@ class GmailTool:
             logger.error(f"Gmail get failed: {e}")
             return None
 
+    def get_or_create_label(self, label_name: str) -> Optional[str]:
+        if not self.service:
+            return None
+        try:
+            results = self.service.users().labels().list(userId=settings.gmail_user_email or "me").execute()
+            labels = results.get("labels", [])
+            for label in labels:
+                if label["name"].lower() == label_name.lower():
+                    return label["id"]
+            
+            # Create if not exists
+            new_label = {
+                "name": label_name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show"
+            }
+            created_label = self.service.users().labels().create(
+                userId=settings.gmail_user_email or "me", 
+                body=new_label
+            ).execute()
+            return created_label["id"]
+        except Exception as e:
+            logger.error(f"Gmail label get/create failed: {e}")
+            return None
+
     def modify_labels(
         self,
         message_id: str,

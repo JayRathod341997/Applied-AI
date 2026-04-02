@@ -36,22 +36,43 @@ class EmailPipeline:
         label = CATEGORY_LABEL_MAP.get(category, "Unsorted")
 
         if category != "spam":
-            actions.append({"action": "label", "label": label})
+            label_id = self.gmail.get_or_create_label(label)
+            if label_id:
+                self.gmail.modify_labels(email_id, add_labels=[label_id])
+                actions.append({"action": "label", "label": label, "status": "executed"})
+            else:
+                actions.append({"action": "label", "label": label, "status": "failed"})
+
             if classification.get("priority") == "high":
-                actions.append({"action": "star"})
+                self.gmail.modify_labels(email_id, add_labels=["STARRED"])
+                actions.append({"action": "star", "status": "executed"})
 
         if category == "job_application_response":
+            msg = f"New Job Application Response: {subject} from {from_address}"
+            success = await self.notify_slack(msg, channel="#job-alerts")
             actions.append(
-                {"action": "slack_notify", "channel": "#job-alerts", "sent": True}
+                {"action": "slack_notify", "channel": "#job-alerts", "status": "executed" if success else "failed"}
+            )
+
+        if category == "newsletter":
+            msg = f"New Newsletter: {subject} from {from_address}"
+            success = await self.notify_slack(msg, channel="#newsletter-alerts")
+            actions.append(
+                {"action": "slack_notify", "channel": "#newsletter-alerts", "status": "executed" if success else "failed"}
             )
 
         if category == "real_estate_lead":
-            actions.append({"action": "notion_forward"})
+            actions.append({"action": "notion_forward", "status": "pending"})
 
         if classification.get("priority") == "high":
             draft = await self.drafter.draft_reply(from_address, subject, body)
             if draft:
-                actions.append({"action": "draft_reply", "preview": draft[:100]})
+                draft_id = self.gmail.create_draft(to=from_address, subject=f"Re: {subject}", body=draft)
+                actions.append({"action": "draft_reply", "preview": draft[:100], "status": "executed" if draft_id else "failed"})
+
+        # Mark as read by removing UNREAD label
+        self.gmail.modify_labels(email_id, remove_labels=["UNREAD"])
+        actions.append({"action": "mark_read", "status": "executed"})
 
         return {
             "email_id": email_id,
@@ -63,7 +84,7 @@ class EmailPipeline:
         }
 
     async def sync_new_emails(self) -> List[Dict]:
-        messages = self.gmail.list_messages(query="is:unread category:primary newer_than:7d", max_results=2)
+        messages = self.gmail.list_messages(query="is:unread category:primary newer_than:31d", max_results=2)
         results = []
         for msg in messages:
             full_msg = self.gmail.get_message(msg["id"])
@@ -97,13 +118,16 @@ class EmailPipeline:
             "body": body,
         }
 
-    async def notify_slack(self, message: str) -> bool:
+    async def notify_slack(self, message: str, channel: str = None) -> bool:
         if not settings.slack_webhook_url:
             return False
         try:
+            payload = {"text": message}
+            if channel:
+                payload["channel"] = channel
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    settings.slack_webhook_url, json={"text": message}
+                    settings.slack_webhook_url, json=payload
                 )
                 return resp.status_code == 200
         except Exception as e:
