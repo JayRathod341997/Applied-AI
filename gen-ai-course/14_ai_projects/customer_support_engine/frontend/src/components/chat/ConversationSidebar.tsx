@@ -17,15 +17,7 @@ export function ConversationSidebar() {
   const navigate = useNavigate()
 
   const handleSelect = (conv: StoredConversation) => {
-    loadConversation({
-      id: conv.id,
-      messages: conv.messages,
-      issueType: conv.issueType,
-      severity: conv.severity,
-      status: conv.status,
-      createdAt: conv.createdAt,
-      updatedAt: conv.updatedAt,
-    })
+    loadConversation(conv)
     void navigate(ROUTES.CHAT)
   }
 
