@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage
 from typing import Dict
 from ..config import settings
 from ..utils.logger import logger
+from ..utils.exceptions import LLMClassificationError
 import json
 from ..models import EmailClassification
 
@@ -52,9 +53,4 @@ class ClassifierAgent:
             return response.model_dump() if hasattr(response, 'model_dump') else response.dict()
         except Exception as e:
             logger.error(f"Classification failed: {e}")
-            return {
-                "category": "newsletter",
-                "confidence": 0.0,
-                "priority": "low",
-                "reasoning": f"Classification error: {e}",
-            }
+            raise LLMClassificationError(f"Classification failed: {str(e)}")

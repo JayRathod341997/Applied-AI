@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from .utils.exceptions import InboxCleanerException
 from fastapi.middleware.cors import CORSMiddleware
 import time
 
@@ -22,6 +24,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(InboxCleanerException)
+async def inbox_cleaner_exception_handler(request: Request, exc: InboxCleanerException):
+    logger.error(f"Handled application error: {exc.message}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "message": exc.message},
+    )
 
 
 @app.middleware("http")

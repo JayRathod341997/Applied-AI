@@ -5,6 +5,8 @@ from ..tools.gmail_tool import GmailTool
 from ..utils.logger import logger
 import httpx
 from ..config import settings
+import traceback
+from ..utils.exceptions import SlackIntegrationError
 
 
 CATEGORY_LABEL_MAP = {
@@ -29,34 +31,56 @@ class EmailPipeline:
         body = email_data.get("body", "")
         email_id = email_data.get("id", "unknown")
 
-        classification = await self.classifier.classify(from_address, subject, body)
-        actions = []
+        try:
+            classification = await self.classifier.classify(from_address, subject, body)
+        except Exception as e:
+            await self.notify_slack_error(e, f"Classifying email {email_id}")
+            classification = {"category": "newsletter", "priority": "low", "confidence": 0.0, "reasoning": "Classification failed explicitly"}
 
+        actions = []
         category = classification.get("category", "newsletter")
         label = CATEGORY_LABEL_MAP.get(category, "Unsorted")
 
         if category != "spam":
-            label_id = self.gmail.get_or_create_label(label)
-            if label_id:
-                self.gmail.modify_labels(email_id, add_labels=[label_id])
-                actions.append({"action": "label", "label": label, "status": "executed"})
-            else:
-                actions.append({"action": "label", "label": label, "status": "failed"})
+            try:
+                label_id = self.gmail.get_or_create_label(label)
+                if label_id:
+                    self.gmail.modify_labels(email_id, add_labels=[label_id])
+                    actions.append({"action": "label", "label": label, "status": "executed"})
+                else:
+                    actions.append({"action": "label", "label": label, "status": "failed"})
+            except Exception as e:
+                actions.append({"action": "label", "label": label, "status": "failed", "error": str(e)})
+                await self.notify_slack_error(e, f"Applying label '{label}' to email {email_id}")
 
             if classification.get("priority") == "high":
-                self.gmail.modify_labels(email_id, add_labels=["STARRED"])
-                actions.append({"action": "star", "status": "executed"})
+                try:
+                    self.gmail.modify_labels(email_id, add_labels=["STARRED"])
+                    actions.append({"action": "star", "status": "executed"})
+                except Exception as e:
+                    actions.append({"action": "star", "status": "failed", "error": str(e)})
+                    await self.notify_slack_error(e, f"Starring email {email_id}")
 
         if category == "job_application_response":
-            msg = f"New Job Application Response: {subject} from {from_address}"
-            success = await self.notify_slack(msg, channel="#job-alerts")
+            success = await self.notify_slack(
+                email_id=email_id,
+                subject=subject,
+                from_address=from_address,
+                classification=classification,
+                channel="#job-alerts"
+            )
             actions.append(
                 {"action": "slack_notify", "channel": "#job-alerts", "status": "executed" if success else "failed"}
             )
 
         if category == "newsletter":
-            msg = f"New Newsletter: {subject} from {from_address}"
-            success = await self.notify_slack(msg, channel="#newsletter-alerts")
+            success = await self.notify_slack(
+                email_id=email_id,
+                subject=subject,
+                from_address=from_address,
+                classification=classification,
+                channel="#newsletter-alerts"
+            )
             actions.append(
                 {"action": "slack_notify", "channel": "#newsletter-alerts", "status": "executed" if success else "failed"}
             )
@@ -65,14 +89,22 @@ class EmailPipeline:
             actions.append({"action": "notion_forward", "status": "pending"})
 
         if classification.get("priority") == "high":
-            draft = await self.drafter.draft_reply(from_address, subject, body)
-            if draft:
-                draft_id = self.gmail.create_draft(to=from_address, subject=f"Re: {subject}", body=draft)
-                actions.append({"action": "draft_reply", "preview": draft[:100], "status": "executed" if draft_id else "failed"})
+            try:
+                draft = await self.drafter.draft_reply(from_address, subject, body)
+                if draft:
+                    draft_id = self.gmail.create_draft(to=from_address, subject=f"Re: {subject}", body=draft)
+                    actions.append({"action": "draft_reply", "preview": draft[:100], "status": "executed" if draft_id else "failed"})
+            except Exception as e:
+                actions.append({"action": "draft_reply", "status": "failed", "error": str(e)})
+                await self.notify_slack_error(e, f"Drafting reply to email {email_id}")
 
         # Mark as read by removing UNREAD label
-        self.gmail.modify_labels(email_id, remove_labels=["UNREAD"])
-        actions.append({"action": "mark_read", "status": "executed"})
+        try:
+            self.gmail.modify_labels(email_id, remove_labels=["UNREAD"])
+            actions.append({"action": "mark_read", "status": "executed"})
+        except Exception as e:
+            actions.append({"action": "mark_read", "status": "failed", "error": str(e)})
+            await self.notify_slack_error(e, f"Marking email {email_id} as read")
 
         return {
             "email_id": email_id,
@@ -118,18 +150,119 @@ class EmailPipeline:
             "body": body,
         }
 
-    async def notify_slack(self, message: str, channel: str = None) -> bool:
-        if not settings.slack_webhook_url:
+    async def notify_slack(self, email_id: str, subject: str, from_address: str, classification: Dict, channel: str = None) -> bool:
+        if not settings.slack_bot_token:
             return False
         try:
-            payload = {"text": message}
+            category_title = classification.get('category', 'email').replace('_', ' ').title()
+            blocks = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"New {category_title}",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*From:*\n{from_address}"},
+                        {"type": "mrkdwn", "text": f"*Email ID:*\n{email_id}"}
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Subject:*\n{subject}"}
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*Category:*\n{classification.get('category', 'N/A')}"},
+                        {"type": "mrkdwn", "text": f"*Priority:*\n{classification.get('priority', 'N/A')}"},
+                        {"type": "mrkdwn", "text": f"*Confidence:*\n{classification.get('confidence', 'N/A')}"}
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Reasoning:*\n{classification.get('reasoning', 'No reasoning provided.')}"}
+                }
+            ]
+
+            payload = {
+                "text": f"New {category_title}: {subject}",
+                "blocks": blocks
+            }
             if channel:
                 payload["channel"] = channel
+            headers = {
+                "Authorization": f"Bearer {settings.slack_bot_token}",
+                "Content-Type": "application/json"
+            }
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    settings.slack_webhook_url, json=payload
+                    "https://slack.com/api/chat.postMessage", json=payload, headers=headers
                 )
-                return resp.status_code == 200
+                if resp.status_code != 200 or not resp.json().get("ok", False):
+                    error_msg = resp.json().get("error", "Unknown error")
+                    raise SlackIntegrationError(f"HTTP {resp.status_code}: {error_msg}")
+                return True
+        except SlackIntegrationError as e:
+            logger.error(f"Slack notification failed: {e}")
+            await self.notify_slack_error(e, f"Slack notification to {channel}")
+            return False
         except Exception as e:
             logger.error(f"Slack notification failed: {e}")
+            return False
+
+    async def notify_slack_error(self, exc: Exception, context: str) -> bool:
+        if not settings.slack_bot_token:
+            return False
+        try:
+            exc_type = type(exc).__name__
+            tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            # Slack text limits: 3000 chars for text blocks
+            if len(tb_str) > 2000:
+                tb_str = tb_str[-2000:]
+                
+            blocks = [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"🚨 Application Error: {exc_type}",
+                        "emoji": True
+                    }
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*Context:*\n{context}"},
+                        {"type": "mrkdwn", "text": f"*Type:*\n{exc_type}"}
+                    ]
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Description:*\n`{str(exc)}`"}
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Traceback:*\n```\n{tb_str}\n```"}
+                }
+            ]
+            payload = {
+                "text": f"Error: {exc_type} - {context}",
+                "blocks": blocks,
+                "channel": "#exceptions"
+            }
+            headers = {
+                "Authorization": f"Bearer {settings.slack_bot_token}",
+                "Content-Type": "application/json"
+            }
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "https://slack.com/api/chat.postMessage", json=payload, headers=headers
+                )
+        except Exception as e:
+            logger.error(f"Failed to post error to Slack: {e}")
             return False

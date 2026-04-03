@@ -73,7 +73,7 @@ New email: {
 2. Set `GROQ_API_KEY` from console.groq.com
 3. Create GCP project -> Enable Gmail API -> Create OAuth2 credentials (Desktop App) -> Download JSON and set `GOOGLE_CLIENT_SECRETS_JSON` (defaults to `credentials.json`)
 4. Set `NOTION_API_KEY` + relevant DB IDs
-5. Set `SLACK_WEBHOOK_URL`
+5. Set `SLACK_BOT_TOKEN`
 6. `cp .env.example .env` -> Fill all keys
 7. `uv run uvicorn src.inbox_cleaner.main:app --reload --port 8018`
 8. `curl -X POST http://localhost:8018/sync/trigger`
@@ -91,12 +91,12 @@ New email: {
 1. Go to https://api.slack.com/apps
 2. Click Create New App -> From scratch
 3. App name: AI Inbox Cleaner (or similar), pick your workspace
-4. In left menu, open Incoming Webhooks
-5. Turn Activate Incoming Webhooks ON
-6. Click Add New Webhook to Workspace
-7. Choose the channel (for example #job-alerts) and allow
-8. Copy the generated webhook URL
-9. Put it in .env:
+4. In left menu, open **OAuth & Permissions**
+5. Under **Bot Token Scopes**, click **Add an OAuth Scope** and add `chat:write`, `chat:write.public`
+6. Scroll up, click **Install to Workspace**, and Allow
+7. Copy the generated **Bot User OAuth Token** (starts with `xoxb-`)
+8. In Slack, make sure the bot is invited to required channels like `#job-alerts`, `#newsletter-alerts`, and `#exceptions` (type `/invite @<Your_Bot_Name>`).
+9. Set the token in `.env`: `SLACK_BOT_TOKEN="xoxb-..."`
 
 ## Setup with Gmail
 1. Go to Google Cloud Console
@@ -116,4 +116,4 @@ New email: {
 | `GROQ_API_KEY` | Yes | Groq API key |
 | `GOOGLE_CLIENT_SECRETS_JSON` | No | Path to Google OAuth client secrets JSON (defaults to `credentials.json`) |
 | `GMAIL_USER_EMAIL` | No | Gmail address to monitor (defaults to `me`) |
-| `SLACK_WEBHOOK_URL` | No | Slack webhook for alerts |
+| `SLACK_BOT_TOKEN` | No | Slack bot token for alerts & error reporting (`xoxb-...`) |

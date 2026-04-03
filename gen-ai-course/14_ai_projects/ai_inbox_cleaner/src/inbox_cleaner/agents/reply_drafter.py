@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage
 from typing import Optional
 from ..config import settings
 from ..utils.logger import logger
+from ..utils.exceptions import LLMDraftError
 
 
 DRAFT_PROMPT = """Draft a brief, professional reply to this email. Keep it under 150 words.
@@ -42,4 +43,4 @@ class ReplyDrafterAgent:
             return response.content.strip()
         except Exception as e:
             logger.error(f"Draft failed: {e}")
-            return None
+            raise LLMDraftError(f"Draft failed: {str(e)}")

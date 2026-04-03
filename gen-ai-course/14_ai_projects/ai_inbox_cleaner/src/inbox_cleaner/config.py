@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     notion_api_key: str = ""
 
     # Slack
-    slack_webhook_url: str = ""
+    slack_bot_token: str = ""
 
     # Application
     app_env: str = "development"

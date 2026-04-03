@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from ..config import settings
 from ..utils.logger import logger
+from ..utils.exceptions import GmailIntegrationError
 
 
 class GmailTool:
@@ -66,7 +67,7 @@ class GmailTool:
             return result.get("messages", [])
         except Exception as e:
             logger.error(f"Gmail list failed: {e}")
-            return []
+            raise GmailIntegrationError(f"Gmail list failed: {str(e)}")
 
     def get_message(self, message_id: str) -> Optional[Dict]:
         if not self.service:
@@ -84,7 +85,7 @@ class GmailTool:
             )
         except Exception as e:
             logger.error(f"Gmail get failed: {e}")
-            return None
+            raise GmailIntegrationError(f"Gmail get failed: {str(e)}")
 
     def get_or_create_label(self, label_name: str) -> Optional[str]:
         if not self.service:
@@ -109,7 +110,7 @@ class GmailTool:
             return created_label["id"]
         except Exception as e:
             logger.error(f"Gmail label get/create failed: {e}")
-            return None
+            raise GmailIntegrationError(f"Gmail label get/create failed: {str(e)}")
 
     def modify_labels(
         self,
@@ -133,7 +134,7 @@ class GmailTool:
             return True
         except Exception as e:
             logger.error(f"Gmail label modify failed: {e}")
-            return False
+            raise GmailIntegrationError(f"Gmail label modify failed: {str(e)}")
 
     def create_draft(self, to: str, subject: str, body: str) -> Optional[str]:
         if not self.service:
@@ -158,4 +159,4 @@ class GmailTool:
             return draft.get("id")
         except Exception as e:
             logger.error(f"Gmail draft failed: {e}")
-            return None
+            raise GmailIntegrationError(f"Gmail draft failed: {str(e)}")
