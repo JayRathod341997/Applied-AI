@@ -1,7 +1,39 @@
-.venv
+# Environment and Secrets
 .env
-__pycache__
-.vscode
-.ipynb_checkpoints
-*.pyc
+.env.local
+.env.*.local
+credentials.json
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Specific
 output/
+.ipynb_checkpoints/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
