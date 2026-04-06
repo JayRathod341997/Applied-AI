@@ -44,14 +44,18 @@ class GoogleCalendarTool:
             return []
 
     def create_event(self, calendar_id: str, event: Dict) -> Optional[Dict]:
+        logger.info(f"Creating event in Google Calendar: {event}")
         if not self.service:
+            logger.error("Google Calendar not configured")
             return None
         try:
-            return (
+            created_event = (
                 self.service.events()
                 .insert(calendarId=calendar_id, body=event)
                 .execute()
             )
+            logger.info(f"Event created successfully")
+            return created_event
         except Exception as e:
             logger.error(f"Calendar create failed: {e}")
             return None

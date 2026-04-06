@@ -4,10 +4,19 @@ from ..config import settings
 from ..utils.logger import logger
 
 
+from notion_client import Client
+from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class NotionTool:
     def __init__(self):
         self.client = (
-            Client(auth=settings.notion_api_key) if settings.notion_api_key else None
+            Client(auth=settings.notion_api_key, notion_version="2022-06-28")
+            if settings.notion_api_key
+            else None
         )
 
     def query_database(
@@ -20,7 +29,7 @@ class NotionTool:
             kwargs: Dict[str, Any] = {"database_id": database_id}
             if filter_dict:
                 kwargs["filter"] = filter_dict
-            response = self.client.databases.query(**kwargs)
+            response = self.client.databases.query(**kwargs)  # ✅ correct for 2022-06-28
             return response.get("results", [])
         except Exception as e:
             logger.error(f"Notion query failed: {e}")
