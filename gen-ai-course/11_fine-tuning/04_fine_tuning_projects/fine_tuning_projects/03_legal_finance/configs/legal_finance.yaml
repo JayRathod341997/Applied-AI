@@ -1,0 +1,77 @@
+# Legal/Finance Fine-Tuning Configuration
+
+# Model Configuration
+model:
+  base_model: "microsoft/finbert-tone"
+  model_type: "causal_lm"
+  max_seq_length: 512
+
+# Data Paths
+data:
+  raw_data_dir: "data/raw"
+  processed_dir: "data/processed"
+  pretrain_data_path: "data/processed/pretrain_dataset"
+  sft_data_path: "data/processed/sft_dataset"
+
+# Output
+output:
+  output_dir: "experiments/2026_04_06"
+
+# Stage 1: Domain-Specific Pretraining
+pretrain:
+  epochs: 5
+  batch_size: 8
+  learning_rate: 3.0e-05
+  max_length: 512
+  mlm_probability: 0.15
+  warmup_ratio: 0.03
+
+# Stage 2: Task-Specific Fine-Tuning
+finetune:
+  epochs: 12
+  batch_size: 8
+  learning_rate: 3.0e-05
+  max_length: 512
+
+# LoRA Configuration
+lora:
+  enabled: true
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+
+# Generation Settings
+generation:
+  max_new_tokens: 150
+  num_beams: 4
+  length_penalty: 1.2
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+
+# Optimization
+optimization:
+  gradient_checkpointing: true
+  use_flash_attention: true
+  bf16: true
+  tf32: true
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+# Evaluation
+evaluation:
+  eval_steps: 100
+  save_steps: 200
+  logging_steps: 50
+  save_total_limit: 2
+  metrics:
+    - "rouge"
+    - "bertscore"
+    - "perplexity"
+    - "exact_match"
+
+# System
+system:
+  seed: 42
+  dataloader_num_workers: 4

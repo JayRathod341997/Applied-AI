@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "custom-chatbot-finetune"
+version = "0.1.0"
+description = "Notebook-first local fine-tuning pipeline for a custom chatbot assistant."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "accelerate>=0.30.0",
+    "datasets>=2.18.0",
+    "evaluate>=0.4.1",
+    "fastapi>=0.111.0",
+    "numpy>=1.26.0",
+    "peft>=0.11.0",
+    "PyYAML>=6.0.1",
+    "rouge-score>=0.1.2",
+    "sacrebleu>=2.4.2",
+    "sentencepiece>=0.2.0",
+    "torch>=2.1.0",
+    "transformers>=4.40.0",
+    "uvicorn[standard]>=0.29.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

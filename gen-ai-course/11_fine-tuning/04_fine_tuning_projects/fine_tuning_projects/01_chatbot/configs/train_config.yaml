@@ -1,0 +1,57 @@
+project_name: custom_chatbot_assistant
+seed: 42
+
+model:
+  base_model_name: EleutherAI/gpt-neo-125M
+  max_seq_length: 512
+  load_in_4bit: false
+  torch_dtype: float16
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+
+data:
+  oasst1_dataset: OpenAssistant/oasst1
+  alpaca_dataset: yahma/alpaca-cleaned
+  dolly_dataset: databricks/databricks-dolly-15k
+  cache_dir: data/cache
+  processed_dir: data/processed
+  oasst1_scan_messages: 120000
+  train_split: 0.9
+  val_split: 0.05
+  test_split: 0.05
+  max_samples_total: 12000
+  max_samples_per_dataset:
+    oasst1: 6000
+    alpaca_cleaned: 3000
+    dolly_15k: 3000
+  min_prompt_chars: 8
+  min_response_chars: 8
+  force_rebuild: false
+
+training:
+  output_dir: models/custom_chatbot
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 8
+  num_train_epochs: 1
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  logging_steps: 10
+  save_strategy: epoch
+  evaluation_strategy: epoch
+  gradient_checkpointing: true
+  fp16: true
+  max_grad_norm: 0.3
+  save_total_limit: 2
+
+generation:
+  max_new_tokens: 180
+  temperature: 0.7
+  top_p: 0.9
+  repetition_penalty: 1.05
+

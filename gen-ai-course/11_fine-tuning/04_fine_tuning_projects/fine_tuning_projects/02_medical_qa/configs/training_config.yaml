@@ -1,0 +1,80 @@
+# Medical Q&A Fine-Tuning Configuration
+# Optimized for local laptop (CPU/low-VRAM GPU) and cloud (Colab/SageMaker)
+
+# ── Model ────────────────────────────────────────────────────────────────────
+model:
+  base_model: "microsoft/BioGPT-Large"        # Bio-domain pretrained; swap to
+  # base_model: "meta-llama/Llama-2-7b-hf"   # Llama2 if you have 16 GB VRAM
+  # base_model: "EleutherAI/gpt-neo-1.3B"    # lightweight fallback for CPU
+  trust_remote_code: true
+  torch_dtype: "float16"                      # use "float32" on CPU-only
+
+# ── LoRA (PEFT) ──────────────────────────────────────────────────────────────
+lora:
+  r: 16                   # rank — reduce to 8 for low-VRAM
+  lora_alpha: 32
+  target_modules: ["q_proj", "v_proj"]        # BioGPT uses attention projections
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+dataset:
+  name: "lavita/ChatDoctor-HealthCareMagic-100k"  # primary (MedQuAD-style)
+  fallback: "medalpaca/medical_meadow_medqa"       # fallback
+  subset_size: 5000          # set to null to use full dataset
+  max_seq_length: 512
+  train_split: 0.90
+  val_split: 0.05
+  test_split: 0.05
+  seed: 42
+  cache_dir: "data/raw"
+  processed_dir: "data/processed"
+
+# ── Training ─────────────────────────────────────────────────────────────────
+training:
+  output_dir: "models/medical_qa_lora"
+  num_train_epochs: 3
+  per_device_train_batch_size: 2     # 4 for 16 GB VRAM, 1 for CPU
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 8    # effective batch = 16
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  fp16: false                        # true only when CUDA + float16
+  bf16: false                        # true on Ampere GPUs (A100, 3090)
+  gradient_checkpointing: true
+  optim: "adamw_torch"
+  save_strategy: "epoch"
+  evaluation_strategy: "epoch"
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  report_to: "none"                  # "wandb" | "tensorboard" | "none"
+  logging_steps: 50
+  save_total_limit: 2
+  dataloader_num_workers: 0          # 0 on Windows
+
+# ── Evaluation ───────────────────────────────────────────────────────────────
+evaluation:
+  metrics: ["rouge1", "rouge2", "rougeL", "bleu"]
+  max_new_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+  do_sample: true
+
+# ── Deployment ───────────────────────────────────────────────────────────────
+deployment:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  max_new_tokens: 512
+  timeout: 120
+
+# ── Cloud resources (informational) ──────────────────────────────────────────
+# Google Colab  : T4 (16 GB) — free tier; enable in Runtime > Change runtime type
+# Kaggle        : P100 (16 GB) — free 30 h/week
+# AWS SageMaker : ml.g4dn.xlarge (T4 16 GB) ~$0.74/h
+# Azure         : NC6s_v3 (V100 16 GB)       ~$0.90/h
+# RunPod        : RTX 3090 (24 GB)           ~$0.34/h
