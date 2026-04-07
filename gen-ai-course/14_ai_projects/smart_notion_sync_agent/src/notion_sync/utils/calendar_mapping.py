@@ -38,22 +38,22 @@ def notion_to_gcal(page: Dict[str, Any]) -> Dict[str, Any]:
     The *page* argument should be the ``properties`` field of a Notion page object.
     """
     # Title – Notion stores title as a list of rich text objects
-    title_prop = page.get(settings.notion_title_key, {})
+    title_prop = page.get(settings.notion_title_key) or {}
     title = "".join(t.get("plain_text", "") for t in title_prop.get("title", []))
 
     # Date – Notion stores date objects under ``date``
-    start_date_prop = page.get(settings.notion_start_date_key, {}).get("date", {})
-    end_date_prop = page.get(settings.notion_end_date_key, {}).get("date", {})
-    start_iso = _to_iso(start_date_prop.get("start")) if start_date_prop and start_date_prop.get("start") else None
-    end_iso = _to_iso(end_date_prop.get("start")) if end_date_prop and end_date_prop.get("start") else None
+    start_date_prop = (page.get(settings.notion_start_date_key) or {}).get("date") or {}
+    end_date_prop = (page.get(settings.notion_end_date_key) or {}).get("date") or {}
+    start_iso = _to_iso(start_date_prop.get("start")) if start_date_prop.get("start") else None
+    end_iso = _to_iso(end_date_prop.get("start")) if end_date_prop.get("start") else None
 
     # Location – plain text
-    location_prop = page.get(settings.notion_location_key, {})
+    location_prop = page.get(settings.notion_location_key) or {}
     location = "".join(t.get("plain_text", "") for t in location_prop.get("rich_text", []))
 
     # Type – select name used as description/category
-    type_prop = page.get(settings.notion_type_key, {})
-    type_desc = type_prop.get("select", {}).get("name", "")
+    type_prop = page.get(settings.notion_type_key) or {}
+    type_desc = (type_prop.get("select") or {}).get("name", "")
 
     event: Dict[str, Any] = {
         "summary": title,

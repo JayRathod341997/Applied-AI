@@ -60,6 +60,19 @@ class GoogleCalendarTool:
             logger.error(f"Calendar create failed: {e}")
             return None
 
+    def get_event(self, calendar_id: str, event_id: str) -> Optional[Dict]:
+        if not self.service:
+            return None
+        try:
+            return (
+                self.service.events()
+                .get(calendarId=calendar_id, eventId=event_id)
+                .execute()
+            )
+        except Exception as e:
+            logger.error(f"Calendar get failed for {event_id}: {e}")
+            return None
+
     def update_event(
         self, calendar_id: str, event_id: str, event: Dict
     ) -> Optional[Dict]:

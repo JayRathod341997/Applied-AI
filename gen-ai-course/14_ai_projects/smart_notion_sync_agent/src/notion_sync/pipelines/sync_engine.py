@@ -1,10 +1,8 @@
 from typing import Any, Dict, List, Optional, Callable
 from ..tools.notion_client import NotionTool
 from ..tools.google_calendar import GoogleCalendarTool
-from ..agents.conflict_resolver import ConflictResolverAgent
 from ..utils.logger import logger
 from datetime import datetime
-import hashlib
 import asyncio
 from functools import wraps
 from ..config import settings
@@ -40,29 +38,54 @@ class SyncEngine:
     def __init__(self):
         self.notion = NotionTool()
         self.calendar = GoogleCalendarTool()
-        self.resolver = ConflictResolverAgent()
-
-    def _hash_content(self, data: Dict) -> str:
-        content = str(sorted(data.items()))
-        return hashlib.sha256(content.encode()).hexdigest()[:16]
 
     def _get_rich_text(self, props: Dict, key: str, default: str = "") -> str:
         """Safely extract rich text content from Notion properties."""
         return "".join(
-            t.get("plain_text", "") for t in props.get(key, {}).get("rich_text", [])
+            t.get("plain_text", "") for t in (props.get(key) or {}).get("rich_text", [])
         )
 
     def _get_title_text(self, props: Dict, key: str, default: str = "") -> str:
         """Safely extract title text from Notion properties."""
         return "".join(
-            t.get("plain_text", "") for t in props.get(key, {}).get("title", [])
+            t.get("plain_text", "") for t in (props.get(key) or {}).get("title", [])
         )
 
     def _normalize_date(self, date_str: Optional[str]) -> Optional[str]:
-        """Normalize date string for consistent comparison."""
+        """Normalize date string to standard ISO format for consistent comparison."""
         if not date_str:
             return None
-        return date_str.replace("Z", "+00:00")[:19]
+        try:
+            # Handle both date-only and datetime strings
+            # and normalize to UTC
+            from datetime import timezone
+            dt_str = date_str.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(dt_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            # Standard string for comparison (ignore microseconds)
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception as e:
+            logger.warning(f"Date normalization failed for '{date_str}': {e}")
+            return date_str
+
+    def _normalize_gcal_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Keep only comparable fields from Google event for change checks."""
+        start = event.get("start", {}) or {}
+        end = event.get("end", {}) or {}
+        return {
+            "summary": event.get("summary", ""),
+            "description": event.get("description", ""),
+            "location": event.get("location", ""),
+            "start": {
+                "dateTime": self._normalize_date(start.get("dateTime") or start.get("date")),
+            },
+            "end": {
+                "dateTime": self._normalize_date(end.get("dateTime") or end.get("date")),
+            },
+        }
 
     def _check_if_changed(self, existing: Dict, new: Dict) -> bool:
         """Check if critical fields in Notion properties have changed."""
@@ -72,6 +95,7 @@ class SyncEngine:
             location_key = settings.notion_location_key or "Location"
             type_key = settings.notion_type_key or "Type"
             start_date_key = settings.notion_start_date_key or "Start Date"
+            end_date_key = settings.notion_end_date_key or "End Date"
 
             # Check Title
             if self._get_title_text(new, title_key) != self._get_title_text(
@@ -86,19 +110,29 @@ class SyncEngine:
                 return True
 
             # Check Type
-            new_type = new.get(type_key, {}).get("select", {}).get("name", "")
-            old_type = existing.get(type_key, {}).get("select", {}).get("name", "")
+            new_type = ((new.get(type_key) or {}).get("select") or {}).get("name", "")
+            old_type = ((existing.get(type_key) or {}).get("select") or {}).get("name", "")
             if new_type != old_type:
                 return True
 
             # Check Start Date
             new_start = self._normalize_date(
-                new.get(start_date_key, {}).get("date", {}).get("start")
+                (new.get(start_date_key) or {}).get("date", {}).get("start")
             )
             old_start = self._normalize_date(
-                existing.get(start_date_key, {}).get("date", {}).get("start")
+                (existing.get(start_date_key) or {}).get("date", {}).get("start")
             )
             if new_start != old_start:
+                return True
+
+            # Check End Date
+            new_end = self._normalize_date(
+                (new.get(end_date_key) or {}).get("date", {}).get("start")
+            )
+            old_end = self._normalize_date(
+                (existing.get(end_date_key) or {}).get("date", {}).get("start")
+            )
+            if new_end != old_end:
                 return True
 
         except Exception as e:
@@ -118,9 +152,11 @@ class SyncEngine:
         """Update Notion page with retry logic."""
         return self.notion.update_page(page_id, props)
 
-    async def initial_sync_calendar(self) -> Dict:
-        """Initial push: create Google events for Notion rows lacking a sync ID.
-        Returns a result dict similar to sync_calendar.
+    async def sync_calendar(self, direction: str = "bidirectional") -> Dict:
+        """Unified Bi-directional Synchronization between Notion and Google Calendar.
+        - Notion pages without Sync ID -> Created in GCal
+        - GCal events without Notion page -> Created in Notion
+        - Both exist -> Timestamp-based comparison and update
         """
         result = {
             "status": "success",
@@ -135,154 +171,119 @@ class SyncEngine:
                 result["errors"].append("NOTION_CALENDAR_DB not configured")
                 return result
 
-            # Verify sync ID property exists
-            db = self.notion.client.databases.retrieve(
-                database_id=settings.notion_calendar_db
-            )
-            if settings.SYNC_ID_PROPERTY not in db.get("properties", {}):
-                error_msg = f"Property '{settings.SYNC_ID_PROPERTY}' is missing in Notion database. Please add it as a 'Rich Text' property."
-                logger.error(error_msg)
-                result["status"] = "error"
-                result["errors"].append(error_msg)
-                return result
-
-            # Query Notion for pages where hidden sync ID property is empty
-            filter_dict = {
-                "property": settings.SYNC_ID_PROPERTY,
-                "rich_text": {"is_empty": True},
-            }
-            events = self.notion.query_database(settings.notion_calendar_db, filter_dict)
-            logger.info(f"Found {len(events)} new events to sync from Notion.")
-
-            # Process in batches to avoid rate limits
-            batch_size = 5
-            for i in range(0, len(events), batch_size):
-                batch = events[i : i + batch_size]
-                tasks = []
-
-                for page in batch:
-                    page_id = page.get("id")
-                    props = page.get("properties", {})
-                    gcal_event = notion_to_gcal(props)
-
-                    async def process_page(pid: str, event: Dict) -> bool:
-                        try:
-                            created = await self._create_calendar_event(
-                                settings.google_calendar_id, event
-                            )
-                            if created and created.get("id"):
-                                sync_prop = {
-                                    settings.SYNC_ID_PROPERTY: {
-                                        "rich_text": [
-                                            {
-                                                "type": "text",
-                                                "text": {"content": created["id"]},
-                                            }
-                                        ]
-                                    }
-                                }
-                                await self._update_notion_page(pid, sync_prop)
-                                return True
-                            return False
-                        except Exception as e:
-                            result["errors"].append(
-                                f"Failed to create event for page {pid}: {str(e)}"
-                            )
-                            return False
-
-                    tasks.append(process_page(page_id, gcal_event))
-
-                # Wait for batch to complete
-                batch_results = await asyncio.gather(*tasks)
-                result["records_synced"] += sum(batch_results)
-
-                # Rate limit delay between batches
-                if i + batch_size < len(events):
-                    await asyncio.sleep(0.5)
-
-        except Exception as e:
-            result["status"] = "error"
-            result["errors"].append(str(e))
-            logger.error(f"Initial calendar sync failed: {e}")
-        return result
-
-    async def sync_calendar(self, direction: str) -> Dict:
-        """Synchronize Google Calendar events (Source to Notion).
-        Checks if GCal events exist in Notion (by Sync ID); if not, creates them.
-        """
-        result = {
-            "status": "success",
-            "records_synced": 0,
-            "conflicts_resolved": 0,
-            "errors": [],
-            "last_sync": datetime.utcnow().isoformat() + "Z",
-        }
-        try:
-            if not settings.notion_calendar_db:
-                result["status"] = "skipped"
-                result["errors"].append("NOTION_CALENDAR_DB not configured")
-                return result
-
-            events = self.calendar.list_events(settings.google_calendar_id)
-            logger.info(f"Retrieved {len(events)} events from Google Calendar")
-
-            # Filter valid events first
-            valid_events = [e for e in events if e.get("id")]
-
-            # Pre-fetch all existing sync IDs from Notion in one query
-            all_pages = self.notion.query_database(settings.notion_calendar_db)
-            sync_id_map = {
-                self._get_rich_text(page["properties"], settings.SYNC_ID_PROPERTY): page
-                for page in all_pages
-                if self._get_rich_text(page["properties"], settings.SYNC_ID_PROPERTY)
-            }
-
-            for event in valid_events:
-                event_id = event["id"]
-                existing_page = sync_id_map.get(event_id)
-
-                if not existing_page:
-                    logger.info(
-                        f"Creating new Notion page for calendar event: {event.get('summary')}"
-                    )
-                    notion_props = gcal_to_notion(event)
-                    notion_props[settings.SYNC_ID_PROPERTY] = {
-                        "rich_text": [{"type": "text", "text": {"content": event_id}}]
-                    }
-
-                    created = self.notion.create_page(
-                        settings.notion_calendar_db, notion_props
-                    )
-                    if created:
-                        result["records_synced"] += 1
-                    else:
-                        result["errors"].append(
-                            f"Failed to create Notion page for event {event_id}"
-                        )
-                else:
-                    page_id = existing_page["id"]
-                    existing_props = existing_page["properties"]
-                    new_notion_props = gcal_to_notion(event)
-
-                    if self._check_if_changed(existing_props, new_notion_props):
-                        logger.info(
-                            f"Updating Notion page for event: {event.get('summary')}"
-                        )
-                        updated = self.notion.update_page(page_id, new_notion_props)
-                        if updated:
-                            result["records_synced"] += 1
-                        else:
-                            result["errors"].append(
-                                f"Failed to update Notion page for event {event_id}"
-                            )
+            # 1. Fetch data from both sources
+            gcal_events = self.calendar.list_events(settings.google_calendar_id)
+            notion_pages = self.notion.query_database(settings.notion_calendar_db)
 
             logger.info(
-                f"Pull sync completed: {result['records_synced']} events processed"
+                f"Sync start: {len(gcal_events)} GCal events, {len(notion_pages)} Notion pages"
             )
+
+            # 2. Map existing data by Sync ID / Event ID
+            gcal_map = {e["id"]: e for e in gcal_events if e.get("id")}
+            notion_map_by_sync_id = {}
+            new_notion_pages = []
+
+            for page in notion_pages:
+                sync_id = self._get_rich_text(page["properties"], settings.SYNC_ID_PROPERTY)
+                if sync_id:
+                    notion_map_by_sync_id[sync_id] = page
+                else:
+                    new_notion_pages.append(page)
+
+            # 3. Handle Notion pages NOT in GCal (New Notion items)
+            if direction in ["notion_to_source", "bidirectional"]:
+                for page in new_notion_pages:
+                    logger.info(f"Creating GCal event for new Notion page: {page['id']}")
+                    gcal_payload = notion_to_gcal(page["properties"])
+                    created = await self._create_calendar_event(
+                        settings.google_calendar_id, gcal_payload
+                    )
+                    if created and created.get("id"):
+                        await self._update_notion_page(
+                            page["id"],
+                            {
+                                settings.SYNC_ID_PROPERTY: {
+                                    "rich_text": [
+                                        {
+                                            "type": "text",
+                                            "text": {"content": created["id"]},
+                                        }
+                                    ]
+                                }
+                            },
+                        )
+                        result["records_synced"] += 1
+
+            # 4. Handle GCal events NOT in Notion (New Calendar items)
+            if direction in ["source_to_notion", "bidirectional"]:
+                for event_id, event in gcal_map.items():
+                    if event_id not in notion_map_by_sync_id:
+                        logger.info(f"Creating Notion page for new GCal event: {event.get('summary')}")
+                        notion_props = gcal_to_notion(event)
+                        notion_props[settings.SYNC_ID_PROPERTY] = {
+                            "rich_text": [{"type": "text", "text": {"content": event_id}}]
+                        }
+                        created = self.notion.create_page(
+                            settings.notion_calendar_db, notion_props
+                        )
+                        if created:
+                            result["records_synced"] += 1
+                            # Add to map so we don't process it again in step 5
+                            notion_map_by_sync_id[event_id] = created
+
+            # 5. Handle updates for items that exist in both
+            # Skip items we just created to avoid redundant processing
+            processed_ids = set()
+
+            for event_id, event in gcal_map.items():
+                if event_id in notion_map_by_sync_id:
+                    page = notion_map_by_sync_id[event_id]
+                    page_id = page["id"]
+                    
+                    # Prevent double processing
+                    if page_id in processed_ids:
+                        continue
+                    processed_ids.add(page_id)
+
+                    # Get timestamps
+                    notion_time = self._normalize_date(page.get("last_edited_time"))
+                    gcal_time = self._normalize_date(event.get("updated"))
+                    
+                    if not notion_time or not gcal_time:
+                        continue
+
+                    # Compare and update based on direction and timestamps
+                    if notion_time > gcal_time:
+                        # Notion is newer
+                        if direction in ["notion_to_source", "bidirectional"]:
+                            desired_gcal = notion_to_gcal(page["properties"])
+                            comparable_current = self._normalize_gcal_event(event)
+                            comparable_desired = self._normalize_gcal_event(desired_gcal)
+                            
+                            if comparable_current != comparable_desired:
+                                logger.info(f"Updating GCal from Notion (newer): {event_id}")
+                                self.calendar.update_event(
+                                    settings.google_calendar_id, event_id, desired_gcal
+                                )
+                                result["records_synced"] += 1
+                    
+                    elif gcal_time > notion_time:
+                        # GCal is newer
+                        if direction in ["source_to_notion", "bidirectional"]:
+                            desired_notion = gcal_to_notion(event)
+                            if self._check_if_changed(page["properties"], desired_notion):
+                                logger.info(f"Updating Notion from GCal (newer): {event.get('summary')}")
+                                await self._update_notion_page(page["id"], desired_notion)
+                                result["records_synced"] += 1
+                            else:
+                                logger.debug(f"No changes detected for: {event.get('summary')}")
+
+            logger.info(f"Sync completed: {result['records_synced']} records processed")
         except Exception as e:
             result["status"] = "error"
             result["errors"].append(str(e))
-            logger.error(f"Calendar pull sync failed: {e}")
+            logger.error(f"Sync failed: {e}")
         return result
 
     def _create_empty_result(self, status: str = "not_implemented") -> Dict[str, Any]:
@@ -299,20 +300,7 @@ class SyncEngine:
         results = {}
 
         if "google_calendar" in sources:
-            if direction == "notion_to_source" or direction == "bidirectional":
-                results["google_calendar"] = await self.initial_sync_calendar()
-
-            if direction == "source_to_notion" or direction == "bidirectional":
-                pull_result = await self.sync_calendar(direction)
-                if direction == "bidirectional":
-                    results["google_calendar"]["records_synced"] += pull_result.get(
-                        "records_synced", 0
-                    )
-                    results["google_calendar"]["errors"].extend(
-                        pull_result.get("errors", [])
-                    )
-                else:
-                    results["google_calendar"] = pull_result
+            results["google_calendar"] = await self.sync_calendar(direction)
 
         # Handle other sources
         for source in ["google_drive", "gmail"]:

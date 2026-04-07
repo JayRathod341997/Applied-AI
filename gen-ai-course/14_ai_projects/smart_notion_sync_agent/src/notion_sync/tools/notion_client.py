@@ -26,11 +26,25 @@ class NotionTool:
             logger.warning("Notion client not configured")
             return []
         try:
-            kwargs: Dict[str, Any] = {"database_id": database_id}
-            if filter_dict:
-                kwargs["filter"] = filter_dict
-            response = self.client.databases.query(**kwargs)  # ✅ correct for 2022-06-28
-            return response.get("results", [])
+            results = []
+            has_more = True
+            next_cursor = None
+
+            while has_more:
+                kwargs: Dict[str, Any] = {
+                    "database_id": database_id,
+                }
+                if filter_dict:
+                    kwargs["filter"] = filter_dict
+                if next_cursor:
+                    kwargs["start_cursor"] = next_cursor
+
+                response = self.client.databases.query(**kwargs)
+                results.extend(response.get("results", []))
+                has_more = response.get("has_more", False)
+                next_cursor = response.get("next_cursor")
+
+            return results
         except Exception as e:
             logger.error(f"Notion query failed: {e}")
             return []
