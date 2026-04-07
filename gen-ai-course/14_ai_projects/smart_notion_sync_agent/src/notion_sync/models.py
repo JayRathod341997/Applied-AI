@@ -10,17 +10,29 @@ class SyncAction(str, Enum):
     INCREMENTAL_SYNC = "incremental_sync"
     SOURCE_SYNC = "source_sync"
 
+    @classmethod
+    def __members__(cls):
+        return {name: member.value for name, member in super().__members__.items()}
+
 
 class SyncSource(str, Enum):
     GOOGLE_CALENDAR = "google_calendar"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
 
+    @classmethod
+    def __members__(cls):
+        return {name: member.value for name, member in super().__members__.items()}
+
 
 class SyncDirection(str, Enum):
     NOTION_TO_SOURCE = "notion_to_source"
     SOURCE_TO_NOTION = "source_to_notion"
     BIDIRECTIONAL = "bidirectional"
+
+    @classmethod
+    def __members__(cls):
+        return {name: member.value for name, member in super().__members__.items()}
 
 
 class SyncRequest(BaseModel):
@@ -33,6 +45,19 @@ class SyncRequest(BaseModel):
         default=SyncDirection.BIDIRECTIONAL,
         description="Direction of sync",
     )
+
+    model_config = {
+        "use_enum_values": True,
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "action": "full_sync",
+                    "sources": ["google_calendar"],
+                    "direction": "bidirectional",
+                }
+            ]
+        },
+    }
 
 
 class SourceSyncResult(BaseModel):

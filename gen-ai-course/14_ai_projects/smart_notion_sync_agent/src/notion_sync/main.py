@@ -14,6 +14,7 @@ app = FastAPI(
     title="Smart Notion Sync Agent",
     description="Bi-directional sync between Google Workspace and Notion with LLM conflict resolution",
     version="0.1.0",
+    use_enum_values=True,
 )
 
 app.add_middleware(
