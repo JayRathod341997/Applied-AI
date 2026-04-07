@@ -64,3 +64,13 @@ class NotionTool:
         except Exception as e:
             logger.error(f"Notion retrieve failed: {e}")
             return None
+
+    def archive_page(self, page_id: str) -> bool:
+        if not self.client:
+            return False
+        try:
+            self.client.pages.update(page_id=page_id, archived=True)
+            return True
+        except Exception as e:
+            logger.error(f"Notion archive failed: {e}")
+            return False
