@@ -1,20 +1,37 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import time
 import logging
+import asyncio
 
-from .models import SyncRequest, SyncResponse, HealthStatus
-from .pipelines.sync_engine import SyncEngine
+from .models import SyncRequest, SyncResponse, HealthStatus, SlackEventRequest
+from .pipelines.notion_sync import SyncEngine
+from .pipelines.slack import invoke_slack_to_notion, invoke_notion_to_slack
 from .utils.logger import setup_logger
 from .config import settings
 
 logger = setup_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def loop():
+        while True:
+            await asyncio.to_thread(invoke_notion_to_slack)
+            await asyncio.sleep(10)
+
+    task = asyncio.create_task(loop())
+    yield
+    task.cancel()
+
 
 app = FastAPI(
     title="Smart Notion Sync Agent",
     description="Bi-directional sync between Google Workspace and Notion with LLM conflict resolution",
     version="0.1.0",
     use_enum_values=True,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -71,9 +88,29 @@ async def sync_status():
             "google_calendar": {
                 "configured": bool(settings.google_service_account_json)
             },
-            "slack": {"configured": bool(settings.slack_webhook_url)},
+            "slack": {"configured": bool(settings.slack_bot_token)},
         }
     }
+
+
+@app.post("/slack/events")
+async def slack_events(payload: SlackEventRequest, request: Request):
+    # Slack retries on timeout — ignore retried deliveries
+    if request.headers.get("X-Slack-Retry-Reason") == "http_timeout":
+        return {"ok": True}
+
+    if payload.type == "url_verification":
+        return {"challenge": payload.challenge}
+
+    event = payload.event or {}
+    if (
+        event.get("type") == "message"
+        and not event.get("bot_id")
+        and not event.get("subtype")
+    ):
+        asyncio.create_task(asyncio.to_thread(invoke_slack_to_notion, event))
+
+    return {"ok": True}
 
 
 if __name__ == "__main__":

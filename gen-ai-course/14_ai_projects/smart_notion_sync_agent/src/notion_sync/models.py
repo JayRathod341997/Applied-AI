@@ -81,6 +81,29 @@ class ConflictResolution(BaseModel):
     merged_data: Dict[str, Any]
 
 
+class SlackEventRequest(BaseModel):
+    type: str = Field(..., description="Slack event type (e.g. url_verification, event_callback)")
+    challenge: Optional[str] = Field(default=None, description="Challenge token for URL verification")
+    event: Optional[Dict[str, Any]] = Field(default=None, description="Slack event payload")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "type": "event_callback",
+                    "event": {
+                        "type": "message",
+                        "text": "Fix the login bug by EOD",
+                        "user": "U12345",
+                        "channel": "C12345",
+                        "ts": "1712345678.000100",
+                    },
+                }
+            ]
+        }
+    }
+
+
 class HealthStatus(BaseModel):
     all_systems_healthy: bool
     uptime_hours: float

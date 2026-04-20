@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     notion_grants_db: str = ""
     notion_calendar_db: str = ""
     notion_files_db: str = ""
+    notion_notes_db: str = ""
 
     # Notion Property Names
     notion_title_key: str = "Name"
@@ -30,6 +31,9 @@ class Settings(BaseSettings):
 
     # Slack
     slack_webhook_url: str = ""
+    slack_bot_token: str = ""
+    slack_signing_secret: str = ""
+    slack_sync_channel: str = ""
 
     # Application
     app_env: str = "development"
