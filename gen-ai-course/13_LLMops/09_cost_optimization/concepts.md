@@ -4,11 +4,16 @@
 1. [Understanding LLM Costs](#understanding-llm-costs)
 2. [Token Optimization](#token-optimization)
 3. [Caching Strategies](#caching-strategies)
-4. [Model Selection](#model-selection)
-5. [Infrastructure Cost](#infrastructure-cost)
-6. [Budget Management](#budget-management)
-7. [Cost Monitoring](#cost-monitoring)
-8. [Implementation](#implementation)
+4. [Provider-Native Prompt Caching](#provider-native-prompt-caching)
+5. [Output Length Control](#output-length-control)
+6. [Request Batching](#request-batching)
+7. [Model Selection](#model-selection)
+8. [Fine-Tuning vs. Prompting Trade-offs](#fine-tuning-vs-prompting-trade-offs)
+9. [Infrastructure Cost](#infrastructure-cost)
+10. [Budget Management](#budget-management)
+11. [Cost Monitoring](#cost-monitoring)
+12. [Cost Optimization Decision Tree](#cost-optimization-decision-tree)
+13. [Implementation](#implementation)
 
 ---
 
@@ -937,13 +942,470 @@ def count_tokens(text: str) -> int:
 
 ---
 
+## Provider-Native Prompt Caching
+
+Modern providers (Anthropic, OpenAI) offer **server-side prompt caching** that reuses the KV cache for repeated prompt prefixes. This is the highest-leverage, zero-effort optimization available — no application-level changes required beyond structuring prompts correctly.
+
+### How It Works
+
+When you send a request, the provider checks if the **prefix** of the prompt was recently processed. If yes, it skips recomputing those tokens and charges a discounted rate (typically 10–25% of full input price).
+
+```
+First Request  → Full computation → Full price
+Second Request → Cache HIT on prefix → ~10% of input price
+```
+
+### Anthropic Cache Control (Claude)
+
+Anthropic uses explicit `cache_control` markers to define what to cache:
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic()
+
+# Mark large, stable content with cache_control
+response = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    system=[
+        {
+            "type": "text",
+            "text": "You are a senior software engineer...",
+        },
+        {
+            "type": "text",
+            "text": open("large_codebase_context.txt").read(),  # 50K tokens
+            "cache_control": {"type": "ephemeral"}             # Cache this!
+        }
+    ],
+    messages=[{"role": "user", "content": user_question}]
+)
+
+# Usage shows cache savings
+print(response.usage)
+# cache_creation_input_tokens: 50000  (first call — writing cache)
+# cache_read_input_tokens: 50000      (subsequent calls — reading cache)
+# input_tokens: 25                    (only the question was charged)
+```
+
+**Pricing impact (Claude Sonnet)**:
+| Token type | Price |
+|-----------|-------|
+| Regular input | $3.00 / 1M tokens |
+| Cache write | $3.75 / 1M tokens (one-time) |
+| Cache read | $0.30 / 1M tokens (90% savings) |
+
+### What to Cache
+
+```
+✅ Good candidates for caching (stable, large, reused across requests):
+   - System prompts with detailed instructions
+   - Large reference documents, codebases, or knowledge bases
+   - Few-shot examples
+   - Tool/function definitions
+
+❌ Bad candidates (changes every request):
+   - User messages
+   - Dynamic date/time context
+   - Per-user personalization data
+```
+
+### Structuring Prompts for Maximum Cache Hits
+
+The cache key is the **exact prefix** of the prompt. Always put stable content first, dynamic content last:
+
+```
+[CACHED]  System prompt (instructions, persona)
+[CACHED]  Background documents / reference material
+[CACHED]  Few-shot examples
+──────────────────────────────────────
+[DYNAMIC] Conversation history
+[DYNAMIC] Current user message         ← changes every turn
+```
+
+---
+
+## Output Length Control
+
+Output tokens cost 3–5× more per token than input tokens on most models. Controlling output length directly cuts the largest variable cost.
+
+### Strategies
+
+#### 1. Set `max_tokens` Explicitly
+Never leave `max_tokens` at the model default. Estimate what you need and cap it.
+
+```python
+# Bad: model may generate 4096 tokens when you only need ~100
+response = client.chat.completions.create(model="gpt-4", messages=messages)
+
+# Good: cap based on expected output size
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=messages,
+    max_tokens=150   # You know the answer is short
+)
+```
+
+#### 2. Instruct for Brevity in the Prompt
+
+The single cheapest optimization: tell the model to be concise.
+
+```python
+CONCISE_SUFFIX = "\n\nRespond in 2-3 sentences maximum. Be direct and specific."
+
+# For structured extraction: force a schema
+STRUCTURED_SUFFIX = "\n\nRespond with JSON only, no explanation: {\"field\": \"value\"}"
+```
+
+#### 3. Use Structured Output (JSON Mode)
+
+Structured outputs eliminate conversational filler ("Sure! Here's the analysis...", "Great question!"). JSON-only responses can be 30–50% shorter.
+
+```python
+from openai import OpenAI
+from pydantic import BaseModel
+
+class SentimentResult(BaseModel):
+    label: str      # "positive" | "negative" | "neutral"
+    score: float    # 0.0 - 1.0
+    reason: str
+
+client = OpenAI()
+response = client.beta.chat.completions.parse(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": f"Classify sentiment: {text}"}],
+    response_format=SentimentResult,
+)
+# Output: {"label": "positive", "score": 0.92, "reason": "enthusiastic tone"}
+# NOT: "Sure! I'd be happy to analyze this text for sentiment..."
+```
+
+#### 4. Output Length by Task Type
+
+| Task | Recommended Strategy |
+|------|---------------------|
+| Classification | JSON mode, `max_tokens=20` |
+| Summarization | Set `max_tokens` to 20% of input length |
+| Code generation | `max_tokens` = estimated lines × 15 |
+| Q&A / factual | Instruct "answer in 1–2 sentences" |
+| Open-ended writing | Let model run; set generous but bounded limit |
+
+---
+
+## Request Batching
+
+Many LLM providers offer **batch APIs** that process requests asynchronously at 50% lower cost in exchange for higher latency (results within 24 hours). Ideal for offline workloads.
+
+### When to Use Batch Processing
+
+```
+✅ Use batch API for:
+   - Dataset annotation / labeling
+   - Bulk content generation (product descriptions, SEO copy)
+   - Nightly report generation
+   - Embedding generation for large document sets
+   - Evaluation pipelines
+
+❌ Don't use batch API for:
+   - Real-time user-facing chat
+   - Any flow requiring <5s latency
+```
+
+### OpenAI Batch API
+
+```python
+from openai import OpenAI
+import jsonl, json
+
+client = OpenAI()
+
+# Prepare batch requests as a JSONL file
+requests = [
+    {
+        "custom_id": f"request-{i}",
+        "method": "POST",
+        "url": "/v1/chat/completions",
+        "body": {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": f"Summarize: {doc}"}],
+            "max_tokens": 200
+        }
+    }
+    for i, doc in enumerate(documents)
+]
+
+# Write to JSONL
+with open("batch_input.jsonl", "w") as f:
+    for req in requests:
+        f.write(json.dumps(req) + "\n")
+
+# Upload and submit
+batch_file = client.files.create(
+    file=open("batch_input.jsonl", "rb"),
+    purpose="batch"
+)
+
+batch = client.batches.create(
+    input_file_id=batch_file.id,
+    endpoint="/v1/chat/completions",
+    completion_window="24h"
+)
+
+print(f"Batch ID: {batch.id}, Status: {batch.status}")
+# Cost: 50% less than synchronous API
+```
+
+### Anthropic Message Batches API
+
+```python
+from anthropic import Anthropic
+import anthropic
+
+client = Anthropic()
+
+batch = client.messages.batches.create(
+    requests=[
+        anthropic.types.message_create_params.Request(
+            custom_id=f"doc-{i}",
+            params=anthropic.types.MessageCreateParamsNonStreaming(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=256,
+                messages=[{"role": "user", "content": f"Classify topic: {doc}"}]
+            )
+        )
+        for i, doc in enumerate(documents)
+    ]
+)
+
+print(f"Batch: {batch.id}")
+
+# Poll for completion (or use webhooks)
+import time
+while True:
+    status = client.messages.batches.retrieve(batch.id)
+    if status.processing_status == "ended":
+        break
+    time.sleep(60)
+
+# Retrieve results
+for result in client.messages.batches.results(batch.id):
+    print(result.custom_id, result.result.message.content[0].text)
+```
+
+### Micro-Batching for Real-Time Systems
+
+Even in low-latency systems, you can batch requests that arrive within a short window:
+
+```python
+import asyncio
+from collections import defaultdict
+
+class MicroBatcher:
+    def __init__(self, window_ms: int = 50, max_batch_size: int = 20):
+        self.window_ms = window_ms
+        self.max_batch_size = max_batch_size
+        self._queue: list = []
+        self._futures: list = []
+        self._lock = asyncio.Lock()
+        self._flush_task = None
+
+    async def submit(self, prompt: str) -> str:
+        future = asyncio.get_event_loop().create_future()
+        async with self._lock:
+            self._queue.append(prompt)
+            self._futures.append(future)
+            if len(self._queue) == 1:
+                self._flush_task = asyncio.create_task(self._delayed_flush())
+            elif len(self._queue) >= self.max_batch_size:
+                self._flush_task.cancel()
+                await self._flush()
+        return await future
+
+    async def _delayed_flush(self):
+        await asyncio.sleep(self.window_ms / 1000)
+        await self._flush()
+
+    async def _flush(self):
+        async with self._lock:
+            if not self._queue:
+                return
+            batch, futures = self._queue[:], self._futures[:]
+            self._queue.clear()
+            self._futures.clear()
+        results = await self._call_model_batch(batch)
+        for future, result in zip(futures, results):
+            future.set_result(result)
+
+    async def _call_model_batch(self, prompts: list) -> list:
+        # Implement actual parallel API calls here
+        pass
+```
+
+---
+
+## Fine-Tuning vs. Prompting Trade-offs
+
+Fine-tuning a smaller model can dramatically cut costs for high-volume, narrow-scope tasks — but it comes with upfront investment and maintenance overhead.
+
+### Cost Comparison
+
+```
+Scenario: 10M requests/month, sentiment classification
+
+Option A: GPT-4o with few-shot prompting
+  Input:  ~500 tokens × 10M = 5B tokens → $15,000/month
+  Output: ~50 tokens × 10M  = 500M tokens → $6,000/month
+  Total: ~$21,000/month
+
+Option B: Fine-tuned GPT-4o-mini
+  Fine-tuning cost (one-time): ~$500
+  Input:  ~50 tokens × 10M = 500M tokens → $200/month
+  Output: ~10 tokens × 10M = 100M tokens → $120/month
+  Total: ~$320/month + $500 one-time
+
+Savings: $20,680/month after break-even (~day 1)
+```
+
+### Decision Framework
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│            Fine-Tune or Prompt?                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Task is well-defined and narrow?          ──Yes──►  Fine-tune  │
+│  Volume > 100K requests/month?             ──Yes──►  Fine-tune  │
+│  Task requires specialized style/format?   ──Yes──►  Fine-tune  │
+│  Have 500+ labeled examples?               ──Yes──►  Fine-tune  │
+│                                                                  │
+│  Task changes frequently?                  ──Yes──►  Prompt     │
+│  Low volume (<10K/month)?                  ──Yes──►  Prompt     │
+│  Need general reasoning capability?        ──Yes──►  Prompt     │
+│  No labeled data available?                ──Yes──►  Prompt     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Fine-Tuning with OpenAI
+
+```python
+from openai import OpenAI
+import json
+
+client = OpenAI()
+
+# Prepare training data
+training_data = [
+    {"messages": [
+        {"role": "system", "content": "Classify sentiment as positive/negative/neutral."},
+        {"role": "user", "content": "This product is amazing!"},
+        {"role": "assistant", "content": "positive"}
+    ]},
+    # ... hundreds more examples
+]
+
+with open("train.jsonl", "w") as f:
+    for item in training_data:
+        f.write(json.dumps(item) + "\n")
+
+# Upload training file
+train_file = client.files.create(file=open("train.jsonl", "rb"), purpose="fine-tune")
+
+# Start fine-tuning job
+job = client.fine_tuning.jobs.create(
+    training_file=train_file.id,
+    model="gpt-4o-mini",
+    hyperparameters={"n_epochs": 3}
+)
+
+print(f"Fine-tune job: {job.id}")
+# Once complete, use: model="ft:gpt-4o-mini:org:name:id"
+```
+
+### Distillation: Use a Large Model to Train a Small One
+
+```python
+# Step 1: Generate high-quality outputs with a large model
+teacher_outputs = []
+for prompt in training_prompts:
+    response = client.chat.completions.create(
+        model="gpt-4o",           # Expensive teacher model
+        messages=[{"role": "user", "content": prompt}]
+    )
+    teacher_outputs.append({
+        "prompt": prompt,
+        "output": response.choices[0].message.content
+    })
+
+# Step 2: Fine-tune a small model on these outputs
+# The small model learns to mimic the large model's behavior
+# at 10-100x lower inference cost
+```
+
+---
+
+## Cost Optimization Decision Tree
+
+Use this when deciding which optimization to apply first:
+
+```
+Start: Are costs too high?
+│
+├─► Is cache hit rate < 30%?
+│      YES → Implement semantic cache or restructure prompts for provider caching
+│      NO  → Continue
+│
+├─► Are prompts longer than 500 tokens on average?
+│      YES → Compress prompts; move stable content to cached prefix
+│      NO  → Continue
+│
+├─► Are output tokens > 3× input tokens?
+│      YES → Add brevity instructions; use structured output (JSON mode)
+│      NO  → Continue
+│
+├─► Is one model used for ALL tasks?
+│      YES → Implement model routing (small model for simple tasks)
+│      NO  → Continue
+│
+├─► Is this a batch/offline workload?
+│      YES → Switch to Batch API (50% cost reduction instantly)
+│      NO  → Continue
+│
+├─► Volume > 1M requests/month on a narrow task?
+│      YES → Fine-tune a smaller model; consider self-hosting
+│      NO  → Continue
+│
+└─► Have you set per-user and daily budget limits?
+       NO  → Implement BudgetManager immediately
+       YES → Audit top-cost users/endpoints; optimize those first
+```
+
+### Quick Wins vs. Strategic Investments
+
+| Optimization | Effort | Impact | Time to Value |
+|-------------|--------|--------|---------------|
+| Set `max_tokens` explicitly | Minutes | Medium | Immediate |
+| Add brevity instructions | Minutes | Medium | Immediate |
+| Provider prompt caching | Hours | High | Same day |
+| Semantic cache | Days | High | Same day |
+| Model routing | Days | High | Same day |
+| Switch to Batch API | Hours | 50% cost cut | Same day |
+| Fine-tune small model | Weeks | Very High | After break-even |
+| Self-host open-source model | Months | Very High | Long-term |
+
+---
+
 ## Best Practices
 
-1. **Start with Caching**: Biggest ROI for minimal effort
-2. **Optimize Prompts**: Remove unnecessary tokens
-3. **Use Right Model**: Don't use GPT-4 for simple tasks
-4. **Set Budgets**: Prevent cost overruns
-5. **Monitor Continuously**: Track costs in real-time
-6. **Implement Rate Limits**: Control usage per user
-7. **Consider Self-Hosting**: For very high volume
-8. **Review and Iterate**: Regular cost audits
+1. **Start with Caching**: Biggest ROI for minimal effort — semantic cache + provider-native prompt caching together can cut 40–70% of costs
+2. **Control Output Length**: Output tokens cost 3–5× more; add brevity instructions and set `max_tokens` on every call
+3. **Use Structured Outputs**: JSON mode eliminates conversational filler, reducing output tokens by 30–50%
+4. **Enable Provider Prompt Caching**: Structure prompts with stable content first; cache large system prompts and reference documents
+5. **Route to the Right Model**: Don't use a flagship model for classification or simple Q&A — use model routing
+6. **Batch Offline Workloads**: Any non-real-time processing (labeling, bulk generation, evals) should use the Batch API for 50% savings
+7. **Set Budgets Early**: Implement per-user and daily/monthly limits before production traffic hits — not after a surprise bill
+8. **Monitor Continuously**: Track cost by model, endpoint, and user — anomalies are invisible without observability
+9. **Fine-Tune at Scale**: If a single narrow task exceeds 500K requests/month, fine-tuning a small model almost always pays off within days
+10. **Consider Self-Hosting**: At very high volume (>100M tokens/month), open-source models (LLaMA, Mistral) on your own GPU fleet can cut costs by 80–90%
+11. **Audit Regularly**: Run monthly cost reviews — prompt patterns drift over time, and yesterday's optimized prompt may be today's bloat

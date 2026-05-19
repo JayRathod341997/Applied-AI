@@ -1,155 +1,70 @@
-# Concepts: Agentic AI Design Patterns
+# Agentic AI Design Patterns — Index
 
-## 1. Reactive vs Planning Agents
+This directory contains a comprehensive guide to the core design patterns for building Agentic AI systems. Each pattern is documented in its own dedicated file inside the [`patterns/`](patterns/) directory.
 
-### Reactive Agents
-Reactive agents respond directly to stimuli without maintaining internal state or planning ahead. They follow simple stimulus-response rules.
+---
 
-**Characteristics:**
-- Fast response times
-- Simple implementation
-- No long-term planning
-- Limited to well-defined scenarios
+## Patterns
 
-**Example:**
-```
-IF user asks about hours THEN respond with store hours
-IF user asks about location THEN respond with address
-```
+| # | Pattern | File | One-Line Summary |
+|---|---|---|---|
+| 01 | **Reactive vs Planning Agents** | [patterns/01_reactive_vs_planning_agents.md](patterns/01_reactive_vs_planning_agents.md) | Stimulus-response rules vs. goal-directed multi-step planning |
+| 02 | **Reflection Pattern** | [patterns/02_reflection_pattern.md](patterns/02_reflection_pattern.md) | Agent critiques and revises its own output before returning it |
+| 03 | **Tool Use Pattern** | [patterns/03_tool_use_pattern.md](patterns/03_tool_use_pattern.md) | LLM selects and calls typed functions to access live data and computation |
+| 04 | **Memory Patterns** | [patterns/04_memory_patterns.md](patterns/04_memory_patterns.md) | Buffer, sliding window, summary, vector, and scratchpad memory strategies |
+| 05 | **ReAct Pattern** | [patterns/05_react_pattern.md](patterns/05_react_pattern.md) | Interleaved Thought → Action → Observation cycles with explicit reasoning |
+| 06 | **Multi-Agent Orchestration** | [patterns/06_multi_agent_orchestration.md](patterns/06_multi_agent_orchestration.md) | Specialised agents coordinated by an orchestrator; parallel and pipeline topologies |
+| 07 | **Plan-and-Execute Pattern** | [patterns/07_plan_and_execute_pattern.md](patterns/07_plan_and_execute_pattern.md) | Upfront full-plan generation followed by sequential step execution with replanning |
 
-### Planning Agents
-Planning agents maintain internal models, consider future states, and develop step-by-step plans to achieve goals.
+---
 
-**Characteristics:**
-- Can handle complex, multi-step tasks
-- Maintains goal state
-- Can replan when conditions change
-- More sophisticated decision making
+## Pattern Selection Guide
 
-**Example:**
-```
-Goal: Book flight to NYC
-1. Check available flights
-2. Compare prices
-3. Select best option
-4. Book ticket
-5. Send confirmation
-```
+Use this table to choose the right pattern for your scenario:
 
-### When to Use Each
+| Scenario | Recommended Pattern |
+|---|---|
+| Simple FAQ or rule-based responses | [01 — Reactive Agent](patterns/01_reactive_vs_planning_agents.md) |
+| Multi-step goal with clear dependencies | [01 — Planning Agent](patterns/01_reactive_vs_planning_agents.md) or [07 — Plan-and-Execute](patterns/07_plan_and_execute_pattern.md) |
+| Improve output quality automatically | [02 — Reflection](patterns/02_reflection_pattern.md) |
+| LLM needs live data or computation | [03 — Tool Use](patterns/03_tool_use_pattern.md) |
+| Short conversations, full recall | [04 — Buffer Memory](patterns/04_memory_patterns.md) |
+| Long sessions, cost-bounded | [04 — Sliding Window / Summary Memory](patterns/04_memory_patterns.md) |
+| Large knowledge base, semantic recall | [04 — Vector Memory](patterns/04_memory_patterns.md) |
+| Iterative reasoning with tool grounding | [05 — ReAct](patterns/05_react_pattern.md) |
+| Complex tasks needing specialised roles | [06 — Multi-Agent Orchestration](patterns/06_multi_agent_orchestration.md) |
+| Irreversible actions, human review needed | [07 — Plan-and-Execute](patterns/07_plan_and_execute_pattern.md) |
 
-| Scenario | Agent Type |
-|----------|------------|
-| Simple FAQ | Reactive |
-| Customer support triage | Reactive |
-| Complex research task | Planning |
-| Multi-step workflows | Planning |
-| Real-time monitoring | Reactive |
+---
 
-## 2. Reflection Patterns
+## Each Pattern File Contains
 
-Reflection allows agents to evaluate their own outputs and improve over time.
+1. **Theoretical Overview** — deep dive into the concept, purpose, and problems it solves
+2. **Architectural Diagram** — Mermaid diagram of components and relationships
+3. **Real-World Analogy** — non-technical scenario illustrating the pattern
+4. **Implementation Example** — clean, production-ready Python code using the Anthropic SDK
+5. **Code Breakdown** — step-by-step explanation of how the pattern's principles are applied
+6. **Pros and Cons** — analysis of advantages and drawbacks
 
-### Types of Reflection
+---
 
-1. **Self-Correction**: Identify and fix errors in reasoning
-2. **Quality Assessment**: Evaluate output quality
-3. **Strategy Adjustment**: Modify approach based on results
+## Prerequisites
 
-### Implementation
+- Python 3.11+
+- `pip install anthropic`
+- Basic understanding of LLMs and the Anthropic API
 
-```python
-class ReflectiveAgent:
-    def reflect(self, output, context):
-        # Check for errors
-        if self.has_errors(output):
-            return self.correct(output)
-        
-        # Assess quality
-        quality = self.assess_quality(output)
-        if quality < threshold:
-            return self.improve(output)
-        
-        return output
-```
+All code examples use `claude-sonnet-4-6` via the `anthropic` Python SDK.
 
-## 3. Tools and Tool Integration
+---
 
-Tools extend agent capabilities beyond text generation.
+## Related Files
 
-### Tool Design Principles
-
-1. **Single Responsibility**: Each tool does one thing well
-2. **Clear Inputs/Outputs**: Well-defined interfaces
-3. **Error Handling**: Graceful failure modes
-
-### Tool Types
-
-- **Information Retrieval**: Search, Database queries
-- **Computation**: Calculator, Code execution
-- **External APIs**: Weather, Stocks, News
-- **File Operations**: Read, Write, List
-
-## 4. Memory Patterns
-
-### Buffer Memory
-Stores the most recent interactions verbatim.
-
-```python
-BufferMemory(capacity=10)  # Last 10 messages
-```
-
-### Sliding Window Memory
-Maintains a fixed-size window of recent context.
-
-```python
-SlidingWindowMemory(window_size=5)
-```
-
-### Summary Memory
-Compresses older interactions into summaries.
-
-```python
-SummaryMemory(
-    initial_summary="User preferences: ...",
-    max_tokens=500
-)
-```
-
-### Vector Memory
-Uses embeddings to retrieve relevant past context.
-
-```python
-VectorMemory(
-    embedding_function=embed_fn,
-    search_top_k=3
-)
-```
-
-### Scratchpad
-Temporary working memory for intermediate calculations.
-
-### Shared Memory
-Allows multiple agents to share context.
-
-## 5. Planning-ReAct Pattern
-
-ReAct (Reasoning + Acting) combines reasoning traces with actions.
-
-### ReAct Loop
-
-1. **Thought**: Reason about the current situation
-2. **Action**: Execute an action
-3. **Observation**: Observe the result
-4. **Repeat**: Continue until goal is achieved
-
-### Example
-
-```
-Thought: I need to find the current weather in London
-Action: call_weather_api(city="London")
-Observation: 18°C, partly cloudy
-Thought: The weather is nice, I should suggest outdoor activities
-Action: generate_suggestions(weather="good")
-...
-```
+| File | Purpose |
+|---|---|
+| [README.md](README.md) | Module overview and learning objectives |
+| [exercise_01.md](exercise_01.md) | Hands-on exercise: implement the key patterns |
+| [solution.py](solution.py) | Reference solution for the exercise |
+| [quiz.md](quiz.md) | Self-assessment questions |
+| [references.md](references.md) | Papers, articles, and further reading |
+| [design_patterns.ipynb](design_patterns.ipynb) | Jupyter notebook walkthrough |
