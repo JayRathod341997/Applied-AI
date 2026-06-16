@@ -236,3 +236,55 @@ D) Manual deployment
 | 11-14 | Competent | Good foundation, revisit specific project architectures |
 | 7-10 | Developing | Re-read concepts.md and study architecture diagrams |
 | 0-6 | Beginner | Review all module materials and prerequisite modules |
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Risk-Management Capstone)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the best architecture for a credit-risk analyst copilot?
+
+A) An LLM as the primary classifier for the risk score  
+B) A calibrated gradient-boosted model for the score, plus RAG/LLM for policy Q&A and narratives  
+C) A single prompt with no retrieval  
+D) A rules engine only  
+
+**Answer: B** — use classic ML for the calibrated, explainable decision and GenAI for reasoning/explanation.
+
+### BQ2. Which capstone deliverable maps to the JD metric "reduced AI deployment timelines"?
+
+A) A bigger model  
+B) MLOps automation and paved-path CI/CD with eval gates  
+C) More prompts  
+D) A larger context window  
+
+**Answer: B** — automation and paved paths are what compress idea-to-production time.
+
+### BQ3. What makes a capstone "production-ready" versus a notebook demo?
+
+A) A nicer chart  
+B) Eval/CI gates, monitoring, rollback, audit trail, and security/cost controls  
+C) More training epochs  
+D) A public GitHub star count  
+
+**Answer: B** — production readiness is operational scaffolding, not model size.
+
+### BQ4. For predicting default probability from tabular features, the right model family is:
+
+A) A large language model  
+B) Gradient-boosted trees — calibrated, explainable, and fast  
+C) A diffusion model  
+D) A k-means cluster  
+
+**Answer: B** — tabular risk prediction is GBM territory; an LLM is the wrong primary classifier.
+
+### BQ5. What is the best way to present the capstone's impact to executives?
+
+A) Walk through the model architecture in detail  
+B) Lead with the business outcome and a quantified metric, then tie tech choices to that value  
+C) Show the training loss curve  
+D) List every library used  
+
+**Answer: B** — executives buy outcomes; anchor on the metric and the value, not the architecture.

@@ -568,3 +568,40 @@ User Interaction → Event Stream → Feature Store → Model
 ---
 
 *End of Module 14 Interview Questions*
+
+
+---
+
+## Senior Deep Dive: A Risk-Management Capstone, End-to-End
+
+> *The JD is for AI in risk management for global, regulated organisations, judged on business outcomes. Interviewers want one project you can walk end-to-end and tie to their success metrics.*
+
+### SQ1: Walk through a risk-management GenAI capstone end-to-end.
+
+**Answer:** The canonical example is a **credit-risk / fraud analyst copilot**. Start by defining the **problem and stakeholders** and locking in the **success metric** upfront — for example, cut analyst case-review time by 30% while holding the false-negative rate below the current baseline. The data layer ingests transactions, internal policy documents, and KYC records. The architecture keeps the classic ML and GenAI components in separate lanes: a **calibrated gradient-boosted tabular model** produces the risk score (fast, explainable, auditable), while a **RAG pipeline** over policy documents answers analyst questions, and an **LLM** writes the human-readable case narrative — the LLM is the *second stage*, not the primary classifier. Evaluation covers **faithfulness and context relevance** for the RAG component, **task-success rate** for the copilot as a whole, and **calibration** (Expected Calibration Error) for the score. Rollout uses a canary with **human-in-the-loop approval** for decisions above a risk threshold, and every tool call, retrieval step, and model output lands in a **full audit trail**. Close by mapping each component back to the JD's stated success metrics.
+
+**Trade-off:** Combining classic ML with GenAI increases system complexity and the number of components to monitor, but it lets each technology do what it does best — the GBM gives a fast, explainable, regulator-ready score, while the LLM provides the natural-language reasoning analysts actually read. Conflating the two roles into a single LLM would sacrifice calibration, auditability, and latency.
+
+### SQ2: How do you map a capstone to the JD's success metrics?
+
+**Answer:** Each deliverable should trace directly to one of the JD's named metrics. **Scalable production deployment** means the system shipped and is serving live traffic with uptime SLAs met — not a notebook. **Model performance / accuracy improvement** requires a quantified lift number against the prior baseline, along with the evaluation methodology. **Reduced deployment timeline** is demonstrated through **MLOps automation and paved-path CI/CD**: automated eval gates, containerised services, and infrastructure-as-code that compress idea-to-production time. **Organisational adoption and impact** is measured in active users, decisions assisted, or analyst hours saved per month. Every metric must be **quantified** — interviewers in regulated firms hear many vague claims; a number anchors the conversation and shows you understand business accountability.
+
+**Trade-off:** Optimising a single metric — say, maximising recall on fraud — can inflate false alarms and analyst fatigue, raising operational cost. State which metric you prioritised and why, referencing the risk owner's explicit sign-off: this signals that you understand trade-offs are business decisions, not purely technical ones.
+
+### SQ3: How do you choose between classic ML and GenAI within the capstone?
+
+**Answer:** The decision rule is: match the tool to the structure of the problem. **Tabular, numeric prediction** — default probability, fraud score, credit limit — goes to **gradient-boosted trees** (XGBoost, LightGBM): they are calibrated, interpretable with SHAP, fast at inference, and straightforward to audit. **Unstructured reasoning** — policy Q&A, document summarisation, case narrative generation — goes to an **LLM / RAG pipeline**. Combine the two; never use an LLM as the primary classifier for a consequential numeric prediction. LLMs are non-deterministic, expensive per call, difficult to calibrate, and produce outputs that regulators cannot reproduce — a fundamental mismatch with Model Risk Management (MRM) requirements for auditability and reproducibility.
+
+**Trade-off:** A hybrid system has more moving parts and a larger operational surface than a pure approach, but the senior maturity signal is recommending the *simplest* model that meets each sub-problem's need — often classic ML for the decision and GenAI for the explanation layer. Reaching for a single LLM to do everything is the junior mistake.
+
+### SQ4: What makes the capstone "production-ready" rather than a notebook demo?
+
+**Answer:** Production readiness is entirely about **operational scaffolding**, not model sophistication. The checklist includes: an **eval harness with CI gates** that must pass before any deploy (faithfulness, calibration, regression against baseline); **monitoring and drift detection** for both feature distributions and model outputs, with alerts when metrics degrade; **rollback** capability within a defined SLA; **security and PII handling** — redaction in logs, encryption at rest and in transit, Role-Based Access Control; a **full audit trail** — every inference, every retrieval, every human approval logged with timestamps and actor identity; **cost controls** — token budgets, caching, and a spending alert; **human-in-the-loop** approval for high-risk decisions above a threshold; and a **model card** documenting intended use, limitations, and validation results for the regulator.
+
+**Trade-off:** Each of these components is real engineering effort that a notebook prototype omits. The trade-off is time-to-demo versus time-to-trust. In a regulated environment, trust is the product — a regulator or a credit-committee chair who cannot audit the system's decisions will block deployment regardless of how impressive the demo looks.
+
+### SQ5: How do you present the capstone's business impact to non-technical stakeholders?
+
+**Answer:** Lead with the **outcome and the metric**, not the architecture. Open with something like: "We reduced the average fraud-case review time from 45 minutes to 12, while holding the false-negative rate below the regulatory threshold — that is $X million in prevented losses per quarter and Y analyst FTEs redeployed to higher-value work." Then **connect each technical choice to business value**: hybrid retrieval reduced hallucinated policy citations, which cuts rework and regulatory risk. Finally, **acknowledge limitations and governance** proactively — "The system flags decisions above a risk threshold for human review, and every output is logged for audit" — because in a regulated firm, risk officers and the board audit team are in the room, and they want to hear control language, not just uplift numbers.
+
+**Trade-off:** The depth of technical detail must be calibrated to the audience. With a CRO or CFO, stay at outcomes and governance. With the model risk team, go into validation methodology and calibration plots. With engineers, go into the architecture. In every case, anchor on business value first — the architecture is supporting evidence, not the lead.
