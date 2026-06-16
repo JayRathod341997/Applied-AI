@@ -670,3 +670,30 @@ class LongRunningAgent:
 - Retry with exponential backoff
 - Asynchronous execution with status polling
 - Task decomposition into smaller subtasks
+
+
+---
+
+## Senior Deep Dive: Multi-Agent Systems, Autonomous Workflows & Conversational AI
+
+> *The JD explicitly calls for multi-agent systems, autonomous workflows, and conversational AI. Interviewers probe whether you add autonomy deliberately — and constrain it for a regulated context.*
+
+### SQ1: When is a multi-agent system the right design, and when is one agent enough?
+
+**Answer:** The case for **multi-agent** is strongest when the task decomposes into **specialized roles** — a researcher, a coder, a critic — or into parallelizable subtasks that can proceed simultaneously, or when you need clear **separation of concerns and permissions** between components. Common patterns include the **supervisor / orchestrator-worker** model (a coordinating agent routes work to specialist workers and aggregates results), hierarchical delegation, and peer-to-peer networks of agents. A **single agent** remains the right call when the work is sequential, the context fits in one window, and the coordination overhead of spinning up multiple agents would outweigh any benefit. The **trade-off to close on** is that more agents buy flexibility and specialization but cost additional latency, token spend, a larger failure surface, and harder debugging and evaluation — and in a regulated risk context that also means more components to audit, log, and explain to a model risk function.
+
+### SQ2: How do you keep an autonomous agent reliable and safe in a regulated (risk) context?
+
+**Answer:** **Bounded autonomy** is the governing principle. Concretely, that means giving each agent a narrowly scoped **tool allow-list** rather than unrestricted capabilities; inserting **human-in-the-loop approval gates** before any high-risk or state-changing action (wire transfers, regulatory filings, customer communications); enforcing **max-step and token-budget caps** so a misbehaving agent cannot run indefinitely; **sandboxing** side-effecting tools; validating outputs against a strict schema before passing them downstream; and maintaining a **full, immutable audit log** of every tool call, the reasoning that preceded it, and the response received. Where the path through a workflow is well-understood, prefer **deterministic chains** over open-ended agents — predictability is itself a control. The **trade-off** is direct: autonomy accelerates work but trades away control and auditability. The professional answer is to tier the level of autonomy by the risk of the action — read-only research tools can run freely, while write actions require approval.
+
+### SQ3: Agent vs simple chain — what's your decision criterion?
+
+**Answer:** The right question is whether the execution path is **genuinely dynamic and tool-dependent** at runtime, such that it cannot be specified in advance. If the answer is yes — if the agent must observe a result before deciding the next step — then an agent is warranted. If the sequence of steps can be **pre-defined**, a **chain or graph** is the better choice: cheaper, faster, more predictable, and easier to test deterministically. Most systems that are called "agents" in practice should be chains. Reaching for an agent where a chain would suffice adds complexity, token cost, and latency with no real benefit. The **trade-off** is flexibility versus cost, latency, and predictability — default to the least dynamic design that legitimately solves the problem and escalate to an agent only when dynamism is actually required.
+
+### SQ4: How do agents coordinate and share state in a multi-agent system?
+
+**Answer:** The primary coordination mechanisms are: a **supervisor agent** that routes subtasks to workers and merges their outputs; **message passing** between agents using typed hand-off messages; a shared **scratchpad or blackboard** that all agents can read and update; and various forms of **memory** (short-term context windows, long-term vector retrieval). The main risks that arise in practice are **context bloat** — every agent dragging in the full conversation history and consuming excessive tokens — and **conflicting actions** from two agents attempting to modify the same shared resource simultaneously. Mitigations include scoping context to only what each agent needs, using typed and validated hand-offs to make the interface between agents explicit, and designating a **single writer** for any shared state. The **trade-off** is richer coordination capability versus context cost and the possibility of race conditions — which is why typed schemas, explicit hand-offs, and a clear ownership model for shared state matter more as the number of agents grows.
+
+### SQ5: What does production conversational AI need beyond the LLM call?
+
+**Answer:** A production-grade conversational AI system requires considerably more than a raw LLM invocation. It needs **session and state management** to maintain context across turns; **memory** at two levels — a short-term sliding window for the current conversation and long-term summarization or retrieval-based memory for persistent facts about the user or case; **guardrails** for content safety, policy compliance, and off-topic deflection; **fallback and escalation paths** to a human agent when confidence is low or the topic is out of scope; **intent routing** to direct queries to the right handler; **RAG grounding** to anchor responses in authoritative documents rather than model parameters; and **streaming** to reduce perceived latency. For customer-facing or risk-domain deployments, add content-safety filtering and comprehensive interaction logging for compliance. The **trade-off** is that each additional capability adds latency and operational cost — the senior discipline is to add them where the conversation's risk profile and business value justify the overhead, not by default.

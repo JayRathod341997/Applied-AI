@@ -190,3 +190,55 @@ Choose the best answer for each question. Answers and explanations are provided 
 
 ### A20. B - `add_conditional_edges()`
 **Explanation:** `add_conditional_edges()` allows dynamic routing based on the current state, enabling the graph to choose different paths at runtime based on agent decisions or conditions.
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Multi-Agent & Autonomous Workflows)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the strongest justification for a multi-agent design over a single agent?
+
+A) It always runs faster  
+B) The task decomposes into specialized roles or parallelizable subtasks needing separation of concerns  
+C) It uses fewer tokens  
+D) It removes the need for evaluation  
+
+**Answer: B** — multi-agent pays off when specialization or parallelism is real; otherwise the coordination overhead is pure cost.
+
+### BQ2. For an autonomous agent that can take consequential actions in a regulated domain, which control matters most?
+
+A) A larger context window  
+B) Bounded autonomy: tool allow-lists, human-in-the-loop approval, and a full audit log  
+C) A higher temperature  
+D) More agents  
+
+**Answer: B** — consequential actions require approval gates, least-privilege tools, and auditability.
+
+### BQ3. When is a deterministic chain preferable to an agent?
+
+A) Never  
+B) When the path is known and static — it is cheaper, faster, and predictable  
+C) Only when there are no tools  
+D) Only for image tasks  
+
+**Answer: B** — if you can pre-define the flow, a chain beats an agent on cost, latency, and predictability.
+
+### BQ4. A coordinator that delegates subtasks to specialist agents is which pattern?
+
+A) Bag-of-words  
+B) Supervisor / orchestrator-worker  
+C) Map-reduce only  
+D) Single-shot prompting  
+
+**Answer: B** — a supervisor routes work to specialized workers and aggregates results.
+
+### BQ5. Which metric set best evaluates an agent?
+
+A) Accuracy alone  
+B) Task success rate, tool-call correctness, trajectory/steps, and cost  
+C) Token count only  
+D) Lines of code  
+
+**Answer: B** — agents need outcome *and* process metrics, including how efficiently they got there.
