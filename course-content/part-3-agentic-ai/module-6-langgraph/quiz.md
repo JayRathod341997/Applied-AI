@@ -244,3 +244,55 @@ D) Agents communicate through external queues
 
 **Answer:** B  
 **Explanation:** In the supervisor pattern, a central routing node examines the state and uses conditional edges to dispatch work to specialized agents, then collects results back.
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Stateful Orchestration & Durable Agents)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the main reason to choose LangGraph over a linear chain?
+
+A) It is always cheaper  
+B) You need branching, loops, and shared state with controllable, persistent execution  
+C) It removes the need for an LLM  
+D) It only does image generation  
+
+**Answer: B** — LangGraph models stateful, branching, cyclic workflows that a linear chain cannot.
+
+### BQ2. How is human-in-the-loop achieved in LangGraph?
+
+A) By raising the temperature  
+B) A checkpointer plus an interrupt before/after a node, resuming on human approval  
+C) By disabling tools  
+D) It is not possible  
+
+**Answer: B** — the graph persists state, pauses at an interrupt, and resumes after a human approves/edits.
+
+### BQ3. What does a checkpointer enable?
+
+A) Faster token generation only  
+B) Durable, resumable per-thread state: crash recovery, long-running workflows, and audit/replay  
+C) Cheaper embeddings  
+D) Automatic fine-tuning  
+
+**Answer: B** — checkpointers persist state so workflows survive crashes and can be replayed/audited.
+
+### BQ4. Best way to prevent state/context bloat in a long graph?
+
+A) Inline every artifact into state  
+B) Typed state + reducers + trim/summarize messages + store large artifacts by reference  
+C) Never persist state  
+D) Use a single global variable  
+
+**Answer: B** — a typed schema with reducers and summarization keeps state bounded.
+
+### BQ5. When is LangGraph overkill?
+
+A) For a simple, static, linear pipeline with no branching or state  
+B) For any workflow with loops  
+C) Whenever you need persistence  
+D) For human-in-the-loop flows  
+
+**Answer: A** — a plain chain is simpler and cheaper when there is no branching, looping, or state.
