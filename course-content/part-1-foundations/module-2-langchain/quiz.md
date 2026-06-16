@@ -445,3 +445,54 @@ Choose the best answer for each question. Answers and explanations are provided 
 | 22-26 | Proficient — Solid understanding of core concepts |
 | 16-21 | Intermediate — Review weak areas and practice |
 | 0-15 | Beginner — Revisit the concepts material |
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (LlamaIndex vs LangChain)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. Your core problem is ingesting, indexing, and retrieving over a large private document set with minimal orchestration glue. Which framework is the most natural fit?
+
+A) LangChain — for its agent abstractions  
+B) LlamaIndex — a data/retrieval-first framework  
+C) Neither; you must use raw SDK calls  
+D) A general web framework like FastAPI  
+
+**Answer: B** — LlamaIndex is built around ingest→index→retrieve; LangChain shines when you also need general agent/tool orchestration.
+
+### BQ2. What is the strongest reason to drop a framework and use the provider SDK directly?
+
+A) Frameworks can never stream responses  
+B) A latency/cost-critical hot path where abstraction overhead and opacity hurt control and auditability  
+C) The SDK is always fewer lines of code  
+D) Frameworks cannot call external tools  
+
+**Answer: B** — on hot paths you often want full control of prompts, tokens, retries, and streaming, and transparent behavior for audit.
+
+### BQ3. What does LangChain's LCEL primarily provide?
+
+A) A vector database  
+B) Declarative composition with streaming, async, batching, and fallbacks  
+C) A fine-tuning service  
+D) A replacement for Python itself  
+
+**Answer: B** — LCEL composes pipeline steps declaratively and adds cross-cutting features for free.
+
+### BQ4. Which ordering correctly describes a LlamaIndex RAG pipeline?
+
+A) Index → Documents → Query engine → Nodes  
+B) Documents → Nodes → Index → Retriever → Postprocessor → Response synthesizer  
+C) Retriever → Documents → Index → Nodes  
+D) Query engine → Index → Documents  
+
+**Answer: B** — documents are parsed into nodes, indexed, retrieved, post-processed (e.g. re-ranked), then synthesized into a response.
+
+### BQ5. What is the best practice for limiting framework lock-in?
+
+A) Never pin versions so you always get the latest  
+B) Wrap the framework behind your own interface, pin versions, and evaluate upgrades against your own benchmarks  
+C) Fork the framework and maintain it yourself  
+D) Avoid frameworks entirely in all cases  
+
+**Answer: B** — an adapter layer plus pinned versions keeps you able to upgrade, swap, or drop the framework on your terms.
