@@ -337,3 +337,55 @@ D) Crash the process to trigger container restart
 | 14–17 | **Good** | Review weak areas before proceeding |
 | 10–13 | **Fair** | Re-read `concepts.md` and retry the quiz |
 | Below 10 | **Needs Work** | Study the module thoroughly; focus on reliability patterns and caching |
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Enterprise AI Architecture on Azure)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the strongest reason to choose Azure OpenAI / AI Foundry over self-hosting?
+
+A) It is always cheaper at every scale  
+B) Speed to production plus managed scaling and compliance, with no infrastructure burden  
+C) It allows arbitrary weight surgery  
+D) It removes the need for evaluation  
+
+**Answer: B** — managed services win on speed, scaling, and compliance; self-hosting wins on cost-at-scale and control.
+
+### BQ2. What is the strongest reason to self-host an open model on AKS?
+
+A) It is simpler than a managed API  
+B) Lower cost-per-token at high volume, full data control, customization, and no vendor rate limits  
+C) It needs no monitoring  
+D) It guarantees higher accuracy  
+
+**Answer: B** — self-hosting pays off for high-volume, sensitive, or heavily-customized workloads.
+
+### BQ3. Which lever gives predictable cost/latency for steady high-volume LLM traffic on Azure?
+
+A) Always PAYG  
+B) Provisioned throughput (PTU) for steady load, combined with caching and routing  
+C) Disabling retries  
+D) A larger context window  
+
+**Answer: B** — PTU reserves throughput for predictable load; caching/routing cut redundant spend.
+
+### BQ4. Which Azure control keeps AI traffic off the public internet in a regulated system?
+
+A) A public IP  
+B) Private Link / VNet integration  
+C) A larger SKU  
+D) Disabling TLS  
+
+**Answer: B** — Private Link / VNet integration removes public egress for sensitive workloads.
+
+### BQ5. What is the right primary cost metric for an LLM platform?
+
+A) Cost per API call  
+B) Cost per resolved task  
+C) Number of tokens generated  
+D) Number of deployed models  
+
+**Answer: B** — cost per resolved task reflects real business value, not just per-call price.

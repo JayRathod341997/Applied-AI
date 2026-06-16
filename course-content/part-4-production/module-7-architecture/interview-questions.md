@@ -727,3 +727,44 @@ async def traced_llm_call(prompt: str, model: str):
 | **Multi-Region** | Global DNS, geo-routing, async replication, data residency |
 | **Deployment** | Canary, blue-green, rolling, shadow traffic |
 | **Observability** | Metrics + Logs + Traces + Quality (4 pillars) |
+
+
+---
+
+## Senior Deep Dive: Enterprise AI Architecture & Scalable Pipelines on Azure
+
+> *The JD lists "AI Architecture" and "scalable AI pipelines" with an Azure emphasis. Interviewers want a reference architecture, a build-vs-buy stance, and answers on scale, failure, and security.*
+
+### SQ1: Sketch a reference architecture for an enterprise GenAI platform on Azure.
+
+**Answer:** Walk the layers from the ground up. At the **data and ingestion tier**, documents and transactions land in **Azure Data Lake / Blob Storage** and structured metadata lives in **Azure Database for PostgreSQL – Flexible Server**, which also hosts **pgvector** for co-located embeddings. At the **index and retrieval tier**, embeddings are generated via **Azure OpenAI** (e.g., `text-embedding-3-large`) and stored in pgvector or a dedicated vector service; retrieval combines hybrid search (dense + BM25) and a re-ranker. At the **model tier**, conversational and generation calls go to **Azure OpenAI** or **Azure AI Foundry** for managed hosted models; high-volume or custom models run on **AKS with vLLM** for self-hosted inference. The **orchestration tier** is the application layer — LangChain, LangGraph, or raw SDK calls — which composes retrieval, tool use, and generation. Traffic enters through **Azure API Management**, which handles authentication, rate limiting, caching, and routing. Cross-cutting concerns include **Azure Application Insights** for observability, **Azure Entra ID** and **Key Vault** for identity and secrets, **Private Link** for network isolation, eval/CI quality gates, and governance/audit logging.
+
+The reference table below shows which Azure service maps to each concern:
+
+| Layer | Azure Service | Purpose |
+|---|---|---|
+| Storage | Blob / Data Lake | Raw documents, artifacts |
+| Vector + relational | PostgreSQL Flexible (pgvector) | Embeddings co-located with metadata |
+| Managed LLM | Azure OpenAI / AI Foundry | Inference without infra |
+| Self-hosted LLM | AKS + vLLM | Cost control at scale |
+| Gateway | API Management | Auth, rate-limit, caching |
+| Observability | Application Insights | Metrics, logs, traces |
+| Security | Entra ID, Key Vault, Private Link | Identity, secrets, network isolation |
+
+**Trade-off to close on:** every managed Azure service trades some control and marginal cost for speed to production and compliance certification — you choose per layer based on **scale, data sensitivity, and team capacity to operate infra**.
+
+### SQ2: Build vs buy — managed model API vs self-hosted open model?
+
+**Answer:** **Buy (Azure OpenAI / AI Foundry)** gets you the fastest path to production: managed horizontal scaling, no GPU ops, SLA-backed uptime, and built-in compliance posture (ISO 27001, SOC 2, GDPR data-residency regions). **Build (self-host on AKS + vLLM)** pays off when **cost-per-token at high volume** tips the math, when **data sensitivity** prohibits any third-party processor, when you need **model customization** beyond fine-tuning API access, or when you want to escape vendor rate limits for latency-critical paths. The decision hinges on five dimensions: **scale** (tokens/month), **data sensitivity**, **cost-per-token at volume**, **latency SLA**, and **customization needs**. **Trade-off:** managed wins on speed and compliance; self-hosted wins on cost and control at scale. Most teams start managed and migrate only the highest-volume or most sensitive workloads to self-hosted — resist premature optimization in either direction.
+
+### SQ3: How do you make AI pipelines scalable and cost-controlled?
+
+**Answer:** Scalability and cost discipline require levers at every stage. At the **ingestion side**, use **async queues** (Service Bus or Event Hub) so bursts don't block; **batch embedding calls** to maximize throughput and reduce per-call overhead. At the **inference side**, use **Provisioned Throughput Units (PTU)** for steady, predictable load — they offer consistent latency and lower effective cost than PAYG at volume — and fall back to PAYG for burst. Add **semantic and exact caching** (Azure Cache for Redis) so repeated or near-identical queries never touch the model. Implement **model routing**: a small, fast model (e.g., GPT-4o-mini) handles easy queries; the expensive model is reserved for cases the router classifies as hard. Apply **token budgets**: cap system prompt length, chunk sizes, and max-output tokens per tier. Scale the serving layer with **KEDA on AKS** (event-driven autoscaling on queue depth or GPU utilization). Track the primary metric as **cost per resolved task**, not cost per call — calls that get cached or routed to a smaller model still count as resolved. **Trade-off:** each lever introduces a small quality risk or latency overhead — tie the threshold for each control to its measured impact on task quality.
+
+### SQ4: How do you design an LLM system for failure and resilience?
+
+**Answer:** Resilience for LLM systems combines the patterns of distributed services with LLM-specific failure modes (model errors, content filters, context-length rejections, rate limits). Start with **timeouts** on every model call (not just TCP — also a wall-clock budget for the full chain). Add **retries with exponential backoff and jitter** for transient 429 and 5xx errors, but cap retry budget so a slow model doesn't cascade. Add a **fallback chain**: try the primary model, then a cheaper model, then a cached or template response, then a graceful error. **Circuit breakers** open after N failures in a window, short-circuiting to the fallback immediately rather than exhausting retry budget. For async pipelines use **dead-letter queues** to capture unprocessable messages without dropping them. Design operations to be **idempotent** so safe retries don't double-write. For production risk workloads, consider **multi-region PTU failover** and test failover paths in staging. **Trade-off:** every resilience mechanism — timeouts, retries, circuit breakers, fallbacks — adds latency, code complexity, and operational surface; calibrate the investment to the SLA and the business cost of an outage in a regulated risk context.
+
+### SQ5: How do security and data residency shape the architecture in a regulated domain?
+
+**Answer:** Regulated AI workloads must treat security as a first-class architectural constraint, not an afterthought. Use **Private Link and VNet integration** for all Azure service connections so traffic never traverses the public internet — no public endpoints for OpenAI, PostgreSQL, or Storage. **Pin deployments to a specific Azure region** that satisfies data residency obligations (e.g., EU for GDPR). Use **Entra ID** for all authentication (no static API keys in application config) and enforce **RBAC** at the resource level. Store all secrets and keys in **Azure Key Vault** with access policies tied to managed identities, not service principals with passwords. Apply **PII detection and redaction** before any user data enters a model call — log redaction decisions for the audit trail. Enable **customer-managed keys (CMK)** for data at rest where the regulation demands it. Maintain **end-to-end audit logging** of every model call, tool invocation, and data access, structured for ingestion into your SIEM. **Trade-off:** strict network isolation, CMK, and PII redaction slow initial development velocity and integration complexity — the mitigation is to bake all of these into a **paved path** (infrastructure templates, SDK wrappers) so individual teams don't face the compliance burden from scratch on every project.
