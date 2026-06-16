@@ -338,3 +338,55 @@ D) Training divergence; LoRA uses smaller learning rates
 | 10–13 | Intermediate | Revisit Sections 11.2 and 11.3; practice the implementation walkthrough |
 | 6–9 | Beginner | Review all of Module 11; focus on the comparison table and decision framework |
 | 0–5 | Needs Study | Start with Section 11.1 and work through each concept methodically |
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Fine-Tuning, PEFT & Synthetic Data)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. You need the model to reliably cite up-to-date internal policies. Fine-tune or RAG?
+
+A) Fine-tune — it memorizes facts best  
+B) RAG — fresh facts with citations and access control  
+C) Neither is possible  
+D) Increase temperature  
+
+**Answer: B** — RAG handles changing factual knowledge with citations; fine-tuning is for behavior, not fresh facts.
+
+### BQ2. What does LoRA do?
+
+A) Retrains all model weights  
+B) Freezes the base model and trains small low-rank adapter matrices  
+C) Quantizes the dataset  
+D) Replaces the tokenizer  
+
+**Answer: B** — LoRA trains compact, swappable adapters on top of a frozen base.
+
+### BQ3. What does QLoRA add over LoRA?
+
+A) Nothing  
+B) 4-bit (NF4) quantization of the frozen base so large models fine-tune on a single GPU  
+C) A larger context window  
+D) Automatic RAG  
+
+**Answer: B** — QLoRA quantizes the base to 4-bit, slashing memory needs for fine-tuning.
+
+### BQ4. What is the biggest risk of training primarily on model-generated synthetic data?
+
+A) It is always perfect  
+B) Model collapse, bias amplification, and drift — mitigate by mixing real data, ensuring diversity, and human review  
+C) It needs no evaluation  
+D) It removes the need for a base model  
+
+**Answer: B** — synthetic data that dominates the mix degrades the model; treat it as a supplement.
+
+### BQ5. What is the right gate before promoting a fine-tuned model?
+
+A) Deploy immediately  
+B) Evaluate on a golden + hold-out set and run a regression check against the base model  
+C) Check only training loss  
+D) Ask the model if it improved  
+
+**Answer: B** — eval-gated promotion catches task gains that come at the cost of general regressions.
