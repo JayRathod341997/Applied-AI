@@ -227,3 +227,55 @@ D) MCP Proxy
 | 10-12 | Good — Solid knowledge with minor gaps |
 | 7-9 | Fair — Review concepts.md for details |
 | 0-6 | Needs Improvement — Re-read the full module |
+
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (MCP for Enterprise Integration)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the primary value of MCP?
+
+A) It fine-tunes models  
+B) A standard protocol that decouples LLM hosts from tool/data integrations — build a server once, reuse across clients  
+C) It is a vector database  
+D) It replaces Python  
+
+**Answer: B** — MCP avoids N×M bespoke integrations by standardizing how hosts talk to tools and data.
+
+### BQ2. Which three primitives does an MCP server expose?
+
+A) Tables, rows, columns  
+B) Resources, tools, and prompts  
+C) GET, POST, DELETE  
+D) Train, validate, test  
+
+**Answer: B** — resources (data/context), tools (actions), and prompts (templates).
+
+### BQ3. What is the biggest security concern when MCP tool results are fed back to the model?
+
+A) Slow networking  
+B) Prompt injection via tool output — so sanitize results, use least privilege, and require human approval  
+C) Excessive logging  
+D) Tool results are always safe  
+
+**Answer: B** — a tool can return attacker-controlled text that hijacks the model; treat tool output as untrusted input.
+
+### BQ4. When should you choose MCP over plain in-app function calling?
+
+A) When you never use tools  
+B) When integrations should be reusable and shareable across multiple AI clients or teams  
+C) Only for local scripts  
+D) Only when using a vector DB  
+
+**Answer: B** — MCP's decoupling pays off when the same integration must serve many hosts.
+
+### BQ5. Who originated MCP, and what is its portability benefit?
+
+A) A database vendor; it locks you in  
+B) Anthropic; an open standard so one server works across Claude and other MCP-capable hosts  
+C) It has no defined origin  
+D) A single closed-source IDE  
+
+**Answer: B** — MCP is Anthropic's open standard, giving cross-host portability rather than single-vendor lock-in.
