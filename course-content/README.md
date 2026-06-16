@@ -75,6 +75,27 @@ Fundamentals → Retrieval → Agentic AI → Production Engineering → Fine-Tu
 
 ---
 
+## 🎯 Interview Prep — Senior AI Engineer (10+ yrs)
+
+For role-targeted interview preparation (risk-management domain, Azure, Generative AI, leadership), see the
+**[Senior AI Engineer Interview Master Guide](SENIOR-AI-ENGINEER-INTERVIEW-GUIDE.md)** — it maps the job
+description to modules and adds cross-cutting topics: classic ML/DL/NLP/CV fundamentals, system design at scale,
+and technical-leadership/behavioral (STAR) questions. Several modules also carry **Senior Deep Dive** sections:
+
+- [pgvector on Azure PostgreSQL](part-2-retrieval/module-3-rag-vectordb/interview-questions.md) (Module 3)
+- [AI Risk Management & Responsible AI / SR 11-7](part-4-production/module-10-governance/interview-questions.md) (Module 10)
+- [Deploying GenAI on Azure (AI Foundry, Azure OpenAI, AKS)](part-5-fine-tuning-deployment/module-12-deployment/interview-questions.md) (Module 12)
+- [Hallucination mitigation & synthetic data](part-1-foundations/module-1-generative-ai/interview-questions.md) (Module 1)
+- [LlamaIndex vs LangChain & framework exit](part-1-foundations/module-2-langchain/interview-questions.md) (Module 2)
+- [Multi-agent systems & autonomous workflows](part-3-agentic-ai/module-4-agentic-systems/interview-questions.md) (Module 4)
+- [MCP for enterprise integration & copilots](part-3-agentic-ai/module-5-mcp/interview-questions.md) (Module 5)
+- [Stateful orchestration & durable agents](part-3-agentic-ai/module-6-langgraph/interview-questions.md) (Module 6)
+- [Enterprise AI architecture on Azure](part-4-production/module-7-architecture/interview-questions.md) (Module 7)
+- [Fine-tuning vs RAG, LoRA/QLoRA & synthetic data](part-5-fine-tuning-deployment/module-11-fine-tuning/interview-questions.md) (Module 11)
+- [Risk-management capstone, end-to-end](part-6-capstone/module-14-projects/interview-questions.md) (Module 14)
+
+---
+
 ## 🎯 Prerequisites
 
 - Basic Python programming

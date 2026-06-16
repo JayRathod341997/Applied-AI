@@ -37,19 +37,19 @@ A 10+ year role is assessed on four axes. Map your prep to all four — most can
 | JD Requirement | Where it's covered | Senior-level emphasis |
 |----------------|--------------------|-----------------------|
 | LLMs (GPT, **Claude**, Gemini, **Mistral**, open-source), prompting | Module 1 | Model selection trade-offs, Claude/Anthropic API, hallucination control |
-| Prompt engineering, fine-tuning, RAG frameworks | Modules 1, 3, 11 | RAG vs fine-tuning decision, eval-gated promotion |
+| Prompt engineering, fine-tuning, RAG frameworks | Modules 1, 3, 11 | RAG vs fine-tuning decision, eval-gated promotion; **M11 deep dive: LoRA/QLoRA & synthetic data** |
 | RAG architectures, conversational AI | Module 3 | Hybrid retrieval, re-ranking, **pgvector on Azure Postgres** (Module 3 deep dive) |
-| AI agents, multi-agent systems, copilots | Modules 4, 5, 6 | Orchestration (LangGraph), MCP, autonomy vs control |
-| LangChain / LlamaIndex orchestration | Module 2 | When to drop the framework; cost/latency |
+| AI agents, multi-agent systems, copilots | Modules 4, 5, 6 | Orchestration (LangGraph), MCP, autonomy vs control; **M4/M5/M6 deep dives** |
+| LangChain / LlamaIndex orchestration | Module 2 | When to drop the framework; cost/latency; **M2 deep dive: LlamaIndex vs LangChain** |
 | Vector databases (Pinecone, Weaviate, Chroma, FAISS, **pgvector**) | Module 3 | Dedicated DB vs pgvector trade-off |
 | MLOps, CI/CD, Docker, Kubernetes, model monitoring | Modules 8, 9, 13 | Eval gates, canary/blue-green, drift, rollback |
 | Cloud — **Azure** / Azure AI Foundry / AWS / GCP | Modules 12, 8 | **Azure deep dive** (Module 12): Foundry, Azure OpenAI, AKS, PTU |
 | MLOps governance, **responsible AI**, explainability | Module 10 | **Model Risk Management / SR 11-7** deep dive (Module 10) |
-| **Risk management** domain, global/regulated | Modules 10, 14 | MRM, fairness, EU AI Act, fraud/credit risk |
+| **Risk management** domain, global/regulated | Modules 10, 14 | MRM, fairness, EU AI Act, fraud/credit risk; **M14 deep dive: risk capstone** |
 | **Synthetic data**, hallucination experience | Module 1 deep dive | Distillation, privacy, model collapse |
 | Classic ML, deep learning, NLP, computer vision, predictive analytics | **Section A (this guide)** | Fundamentals a 10-yr engineer must own |
 | Technical leadership, mentoring, stakeholder management | **Section C (this guide)** | STAR stories, influence, delivery |
-| AI architecture, scalable pipelines | Module 7 + **Section B** | End-to-end design under constraints |
+| AI architecture, scalable pipelines | Module 7 + **Section B** | End-to-end design under constraints; **M7 deep dive: enterprise architecture on Azure** |
 
 ---
 
