@@ -266,4 +266,4 @@ Key drift detection topics:
 
 - [Drift Detection Concepts](./concepts.md)
 - [References](./references.md)
-- [Observability](./01_observability/)
+- [Observability](../01_observability/)

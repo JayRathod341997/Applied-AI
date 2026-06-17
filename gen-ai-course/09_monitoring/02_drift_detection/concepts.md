@@ -1,126 +1,202 @@
-# Drift Detection - Concepts
+# Drift Detection — Concepts
 
-## What is Drift?
+A model that was accurate on launch day slowly rots. Not because the weights changed, but because the *world* changed around them: users ask new things, documents get updated, vocabulary shifts, and the provider silently swaps the model behind the API. **Drift** is this gradual divergence between the data and behaviour you calibrated on and the data and behaviour you see in production. This file covers the kinds of drift, the statistical tests that detect them (with a worked PSI example), embedding drift, and what to do when drift fires.
 
-Drift refers to the gradual change in data distributions, model behavior, or system performance over time. In Generative AI systems, drift can significantly impact response quality and accuracy.
+---
 
-## Types of Drift
+## 1. What Is Drift?
 
-### 1. Data Drift
+Drift is a change over time in the statistical properties of inputs, outputs, or the input→output relationship. Left undetected it quietly degrades quality long before anything "breaks".
 
-Data drift occurs when the input data distribution changes over time.
+```
+Calibration window (baseline)        Production window (current)
+  query lengths ~ N(50, 10)            query lengths ~ N(70, 15)
+        ▁▂▅█▅▂▁                               ▁▂▃▅█▆▄▂▁
+        └────── same distribution? ──────┘
+                       │
+                       ▼
+            drift score (e.g. PSI) > threshold  →  alert
+```
 
-**Types:**
-- **Feature Drift**: Changes in the statistical properties of input features
-- **Target Drift**: Changes in the expected output distribution
-- **Label Drift**: Changes in ground truth labels
+The detection recipe is always the same: pick a **baseline** distribution, compare a **current** window against it with a divergence metric, and **flag** when the divergence exceeds a threshold.
 
-**Examples:**
-- User queries becoming more complex
-- Document format changes
-- New vocabulary or terminology emerging
+---
 
-### 2. Concept Drift
+## 2. Types of Drift
 
-Concept drift happens when the relationship between input data and target variable changes.
+| Drift type | What changes | LLM example | Detection signal |
+|---|---|---|---|
+| **Data / feature drift** | Input distribution `P(X)` | New topics, longer queries, new language | PSI / KS on input features or embeddings |
+| **Concept drift** | Relationship `P(Y\|X)` | Same query, the "right" answer has changed | Quality-metric trend, change-point tests |
+| **Target / label drift** | Output distribution `P(Y)` | Class mix shifts in a classifier head | PSI / chi-square on outputs |
+| **Embedding drift** | Semantic distribution of vectors | New domain vocabulary shifts centroids | Cosine distance between centroids |
+| **Prompt drift** | Effective prompt stops working | Template degrades after a model update | A/B quality scores over time |
+| **Model drift** | Provider changes the model | Silent version bump changes outputs | Output-distribution comparison |
 
-**Types:**
-- **Sudden Drift**: Abrupt changes (e.g., new policy, news event)
-- **Gradual Drift**: Slow progressive changes (e.g., user behavior evolution)
-- **Recurring Drift**: Periodic patterns (e.g., seasonal changes)
-- **Blip Drift**: Temporary anomalies
+### Temporal shapes of concept drift
 
-### 3. Embedding Drift
+```
+Sudden      Gradual        Recurring        Blip
+ ──┐         ──╲             ╱╲  ╱╲  ╱╲      ──┐ ┌──
+   └──         ╲──          ╱  ╲╱  ╲╱  ╲       └─┘
+abrupt jump   slow slide    seasonal/cyclic   transient spike
+```
 
-Embedding drift occurs when vector representations change due to model updates.
+- **Sudden** — a policy change or news event flips behaviour overnight.
+- **Gradual** — user behaviour slowly evolves over weeks.
+- **Recurring** — seasonal patterns (holiday traffic, quarterly cycles).
+- **Blip** — a one-off anomaly that should *not* trigger retraining.
 
-**Causes:**
-- Embedding model version changes
-- Tokenizer updates
-- Model fine-tuning
+---
 
-**Detection:**
-- Monitor cluster structure over time
-- Track retrieval result stability
-- Compare embeddings before/after updates
+## 3. Detection Methods
 
-### 4. Knowledge Base Staleness
+| Method | Data type | Output | When to use |
+|---|---|---|---|
+| **PSI** (Population Stability Index) | Binned continuous/categorical | Single score | The workhorse for feature drift |
+| **KS test** (Kolmogorov–Smirnov) | Continuous | Statistic + p-value | Two-sample distribution comparison |
+| **Chi-square** | Categorical | Statistic + p-value | Class/category distribution shifts |
+| **KL divergence** | Probability distributions | Score (asymmetric) | Information-loss between distributions |
+| **Cosine distance of centroids** | Embeddings | Score in [0, 2] | Embedding / semantic drift |
 
-Knowledge base staleness happens when indexed documents become outdated.
+### Population Stability Index (PSI) — the workhorse
 
-**Indicators:**
-- Retrieval returns irrelevant results
-- User feedback indicates outdated information
-- Query topics expand beyond indexed content
+PSI compares how the **proportion** of data in each bin changed between baseline and current windows:
 
-## Drift Detection Methods
+```
+PSI = Σ  (current% − baseline%) × ln( current% / baseline% )
+      bins
+```
 
-### Statistical Methods
+Interpretation (the standard credit-risk thresholds, widely reused in ML):
 
-| Method | Description | Use Case |
-|--------|-------------|----------|
-| Population Stability Index (PSI) | Measures distribution shift | Feature drift detection |
-| Kolmogorov-Smirnov Test | Compares distributions | Continuous monitoring |
-| Chi-Squared Test | Tests categorical changes | Class distribution changes |
-| KL Divergence | Measures information loss | Distribution comparison |
+| PSI | Meaning | Action |
+|---|---|---|
+| ≤ 0.10 | No significant drift | Keep monitoring |
+| 0.10 – 0.20 | Moderate drift | Investigate, watch closely |
+| > 0.20 | Significant drift | Act — retrain / refresh |
 
-### Monitoring Metrics
+**Worked example.** Bin a feature into 4 bins. Baseline vs current proportions:
 
-**Retrieval Metrics:**
-- Recall@k changes
-- Precision@k degradation
-- Average similarity score decline
-- Zero-result rate increase
+| Bin | baseline% | current% | diff | ln(cur/base) | contribution |
+|---|---|---|---|---|---|
+| 1 | 0.40 | 0.20 | −0.20 | ln(0.50) = −0.693 | 0.1386 |
+| 2 | 0.30 | 0.30 |  0.00 | ln(1.00) =  0.000 | 0.0000 |
+| 3 | 0.20 | 0.30 | +0.10 | ln(1.50) =  0.405 | 0.0405 |
+| 4 | 0.10 | 0.20 | +0.10 | ln(2.00) =  0.693 | 0.0693 |
+| | | | | **PSI** | **≈ 0.248** |
 
-**Generation Metrics:**
-- Response length changes
-- Token usage patterns
-- Error rate variations
-- User satisfaction scores
+PSI ≈ 0.248 > 0.20 → significant drift. Note that the metric *needs every bin to be non-empty*: if a current bin is 0, `ln(0)` is `−inf`. The fix is a tiny smoothing constant (epsilon) added to every bin proportion.
 
-### Practical Detection Approaches
+```python
+import math
 
-1. **Baseline Comparison**: Compare current distributions against established baselines
-2. **Windowed Analysis**: Compare recent data windows against historical windows
-3. **Ensemble Detection**: Use multiple detection methods for robustness
-4. **User Feedback Integration**: Leverage explicit/implicit user signals
+def psi(baseline_counts, current_counts, eps=1e-6):
+    """PSI from two equal-length lists of per-bin counts."""
+    b_tot = sum(baseline_counts) or 1
+    c_tot = sum(current_counts) or 1
+    score = 0.0
+    for b, c in zip(baseline_counts, current_counts):
+        b_pct = b / b_tot + eps      # smoothing avoids ln(0)/divide-by-zero
+        c_pct = c / c_tot + eps
+        score += (c_pct - b_pct) * math.log(c_pct / b_pct)
+    return score
+```
 
-## Handling Drift
+### KS test (intuition)
 
-### Reactive Strategies
+The Kolmogorov–Smirnov statistic is the **maximum gap between the two cumulative distribution functions**. Bigger gap = more drift. It needs no binning, which makes it convenient for continuous data, but it is less interpretable than PSI's single bounded-ish score.
 
-- **Retraining Triggers**: Automatically trigger model retraining when drift is detected
-- **Fallback Systems**: Switch to simpler models when quality degrades
-- **Human Escalation**: Route complex cases to humans
+```
+CDF
+1.0│        ___________ current
+   │      _/  ┊ D = max gap
+   │    _/    ↕
+   │  _/    _/  baseline
+0.0│_/____/_______________→ value
+```
 
-### Proactive Strategies
+---
 
-- **Continuous Monitoring**: Always track drift metrics
-- **Canary Deployments**: Test changes with small user segments
-- **A/B Testing**: Compare new and old versions in production
-- **Versioned Knowledge Bases**: Maintain multiple document versions
+## 4. Embedding Drift
 
-## Tools for Drift Detection
+For text, the richest drift signal lives in the **embedding space**. Track the centroid (mean vector) of a baseline batch versus a current batch; a growing cosine distance means the *semantics* of incoming queries are moving.
 
-- **Evidently AI**: Open-source drift detection
-- **Amazon SageMaker Model Monitor**: AWS ML monitoring
-- **Google Vertex AI Model Monitoring**: GCP ML monitoring
-- **Seldon**: Open-source ML deployment and monitoring
-- **Fiddler**: ML model explainability and monitoring
+```
+embedding space (2-D projection)
 
-## Best Practices
+baseline cluster        current cluster
+     ● ● ●                     ○ ○
+    ● ●(C_b)● ─────────────► (C_c)○ ○
+     ● ● ●                   ○ ○ ○
+            cosine_distance(C_b, C_c) grows  → embedding drift
+```
 
-1. **Establish Baselines**: Create reference distributions during stable periods
-2. **Set Thresholds**: Define actionable drift thresholds
-3. **Monitor Continuously**: Implement real-time drift detection
-4. **Alert Appropriately**: Create alerts for significant drift
-5. **Document Patterns**: Track drift patterns for better understanding
-6. **Automate Responses**: Implement automated handling where possible
+```python
+import math
 
-## Key Metrics to Track
+def cosine_distance(u, v):
+    dot = sum(a * b for a, b in zip(u, v))
+    nu = math.sqrt(sum(a * a for a in u))
+    nv = math.sqrt(sum(b * b for b in v))
+    return 1.0 - dot / (nu * nv) if nu and nv else 1.0
 
-- **Feature Distribution Statistics**: Mean, std, percentiles
-- **Drift Scores**: PSI, KL divergence, Wasserstein distance
-- **Retrieval Quality**: Recall, precision, similarity scores
-- **User Engagement**: Click-through rates, session duration
-- **Error Patterns**: Error types, frequency, severity
+def centroid(vectors):
+    n = len(vectors)
+    dim = len(vectors[0])
+    return [sum(v[i] for v in vectors) / n for i in range(dim)]
+```
+
+Embedding drift is the early-warning system for RAG: when query semantics move outside what your index covers, retrieval quality drops *before* users complain.
+
+---
+
+## 5. From Detection to Action: Retraining Triggers
+
+Detecting drift is only useful if it drives a decision. Combine signals into a trigger.
+
+```
+        ┌─────────────┐   PSI > 0.2  ┌──────────────┐
+inputs ─►│ drift detect │────────────►│ retrain /    │
+        │ PSI, KS,    │   centroid    │ refresh KB / │──► deploy
+        │ embeddings, │──── dist ────►│ update prompt │    canary
+        │ quality     │   quality↓    └──────────────┘
+        └─────────────┘
+```
+
+| Strategy | Type | Description |
+|---|---|---|
+| **Threshold trigger** | Reactive | Retrain when PSI or quality crosses a line |
+| **Scheduled refresh** | Proactive | Periodic re-index / re-train on a cadence |
+| **Canary deploy** | Proactive | Roll a candidate to a small % and compare |
+| **Fallback model** | Reactive | Switch to a simpler/safer model on degradation |
+| **Human escalation** | Reactive | Route low-confidence cases to a human |
+
+### Online vs offline detection
+
+| Aspect | Offline | Online |
+|---|---|---|
+| Timing | Batch / post-hoc | Streaming / real-time |
+| Latency to alert | Hours–days | Seconds–minutes |
+| Use case | Model evaluation, audits | Production guardrails |
+
+---
+
+## 6. Pitfalls
+
+- **Empty bins** crash PSI/KL via `ln(0)` — always smooth with an epsilon.
+- **Window size matters**: too small a current window is noisy (false positives); too large is sluggish (slow detection).
+- **Blips are not drift**: a transient spike should not trigger an expensive retrain — require the signal to persist (a `for:`-style sustain window).
+- **Multiple comparisons**: testing many features inflates false positives; correct thresholds or aggregate.
+- **Drift ≠ degradation**: a distribution can shift while quality stays fine. Pair input-drift detection with an output-quality signal before acting.
+
+---
+
+## Key Takeaways
+
+- **Drift is gradual divergence**, not a crash: inputs (`P(X)`), outputs (`P(Y)`), or the relationship (`P(Y|X)`) move away from your baseline and quietly erode quality.
+- **The recipe is universal**: baseline distribution → compare current window with a divergence metric → flag past a threshold.
+- **PSI is the workhorse**: `Σ (cur% − base%) · ln(cur%/base%)`; ≤ 0.1 fine, 0.1–0.2 watch, > 0.2 act. Always add an epsilon to avoid `ln(0)`.
+- **Embedding drift is RAG's early warning**: a rising cosine distance between baseline and current centroids predicts retrieval-quality drops before users do.
+- **Detection must drive action**: wire scores into retraining triggers, scheduled refreshes, canaries, or fallbacks — and require persistence so a blip does not trigger a retrain.
+- **Pair input drift with output quality**: a shifted input distribution is only a problem if quality actually drops, so confirm before you act.

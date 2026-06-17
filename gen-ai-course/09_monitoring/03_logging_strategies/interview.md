@@ -294,5 +294,5 @@ Key AI logging topics:
 
 - [Logging Concepts](./concepts.md)
 - [References](./references.md)
-- [Observability](./01_observability/)
-- [Drift Detection](./02_drift_detection/)
+- [Observability](../01_observability/)
+- [Drift Detection](../02_drift_detection/)

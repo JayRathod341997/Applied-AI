@@ -1,276 +1,196 @@
-# AI Logging Strategies - Concepts
+# Logging Strategies — Concepts
 
-## Why AI Logging is Different
+Metrics tell you *that* something is wrong; logs tell you *what* happened. For a GenAI service the logs are uniquely valuable (prompt/response pairs, tool calls, retrieval scores) and uniquely dangerous (those same prompts carry PII). This file covers structured logging, log levels, PII redaction, correlation IDs and distributed tracing, log aggregation, and retention — everything needed to make logs both useful and safe.
 
-AI systems require specialized logging because:
-- **Probabilistic outputs**: Need to capture model confidence and reasoning
-- **Multi-stage pipelines**: RAG has retrieval + generation stages
-- **Cost tracking**: Token usage affects billing
-- **PII concerns**: User data in prompts requires careful handling
-- **Agent workflows**: Complex multi-step executions need tracing
+---
 
-## Logging Components
+## 1. Why AI Logging Is Different
 
-### 1. Request Logging
+| Concern | Traditional app | GenAI service |
+|---|---|---|
+| Output shape | Structured, deterministic | Free-form text, probabilistic |
+| Pipeline | One service | Retrieval → rerank → generation → tools |
+| Cost | Fixed per request | Per-token; must log usage to bill |
+| PII risk | Form fields | *Anywhere* in free-text prompts |
+| Debug unit | A stack trace | A whole multi-step trace |
 
-**Essential Fields:**
-```json
-{
-  "timestamp": "2024-01-15T10:30:00Z",
-  "request_id": "req_abc123",
-  "user_id": "user_xyz789",
-  "model": "gpt-4",
-  "prompt": "User query text",
-  "prompt_tokens": 150,
-  "completion_tokens": 200,
-  "latency_ms": 1500,
-  "metadata": {
-    "temperature": 0.7,
-    "max_tokens": 1000
-  }
-}
+The implication: log **structured records** (not prose), **redact PII** at the boundary, **log token usage** for cost, and **correlate** records across the chain.
+
+---
+
+## 2. Structured Logging
+
+A structured log is a machine-parseable record — almost always JSON — not a human sentence. It can be queried, aggregated, and alerted on without fragile regex parsing.
+
+```
+Unstructured (bad):
+  2026-06-17 10:30 INFO request from john took 1500ms model gpt-4o
+
+Structured (good):
+  {"timestamp":"2026-06-17T10:30:00Z","level":"INFO","service":"rag-api",
+   "request_id":"req_abc","model":"gpt-4o","latency_ms":1500,"status":"ok"}
 ```
 
-### 2. Retrieval Logging (RAG)
+Essential fields for an LLM request record:
 
-```json
-{
-  "request_id": "req_abc123",
-  "query_embedding": [0.1, -0.2, ...],
-  "retrieved_documents": [
-    {
-      "doc_id": "doc_001",
-      "chunk_text": "...",
-      "similarity_score": 0.92,
-      "rank": 1
-    }
-  ],
-  "retrieval_time_ms": 45,
-  "num_retrieved": 5
-}
-```
-
-### 3. Response Logging
-
-```json
-{
-  "request_id": "req_abc123",
-  "response_text": "Generated response...",
-  "total_tokens": 350,
-  "finish_reason": "stop",
-  "model_version": "gpt-4-0613",
-  "response_quality_score": 0.85
-}
-```
-
-### 4. Error Logging
-
-```json
-{
-  "timestamp": "2024-01-15T10:30:00Z",
-  "request_id": "req_abc123",
-  "error_type": "RateLimitError",
-  "error_message": "Rate limit exceeded",
-  "retry_count": 3,
-  "stack_trace": "...",
-  "recovered": true
-}
-```
-
-## Structured Logging Best Practices
-
-### Use JSON Format
+| Field | Purpose |
+|---|---|
+| `timestamp` | When (UTC, ISO-8601) |
+| `level` | Severity (see below) |
+| `service` | Which component emitted it |
+| `request_id` / `correlation_id` / `trace_id` | Stitch records together |
+| `model` | Which model served the call |
+| `input_tokens` / `output_tokens` | Cost & efficiency |
+| `latency_ms` | Performance |
+| `status` / `error_type` | Outcome |
+| `prompt_hash` | Identify identical prompts without storing raw text |
 
 ```python
-import logging
-import json
-
-def log_request(request_data):
-    logging.info(json.dumps(request_data))
+import json, logging
+def log_event(logger, **fields):
+    logger.info(json.dumps(fields))   # one JSON object per line
 ```
 
-### Include Correlation IDs
+---
 
-Track requests across services:
-- `request_id`: Unique per request
-- `trace_id`: Across distributed systems
-- `session_id`: For conversation tracking
+## 3. Log Levels
 
-### Log Levels Strategy
+Levels let you turn the firehose down in production and up while debugging.
 
-| Level | Use Case |
-|-------|----------|
-| DEBUG | Detailed request/response for debugging |
-| INFO | Normal operation events |
-| WARNING | Recoverable issues, retries |
-| ERROR | Failures requiring attention |
-| CRITICAL | System-wide failures |
+| Level | Use for | In prod? |
+|---|---|---|
+| **DEBUG** | Full prompt/response, per-step detail | Off (sampled on) |
+| **INFO** | Normal events: request served, retrieval done | On |
+| **WARNING** | Recoverable issues: retry, fallback used | On |
+| **ERROR** | Failed request needing attention | On |
+| **CRITICAL** | System-wide failure | On + page |
 
-## PII Handling
+A common pattern is to **always log errors** but **sample** INFO/DEBUG to control volume and cost:
 
-### Techniques
-
-1. **Masking**: Replace sensitive data
-   ```python
-   import re
-   
-   def mask_pii(text):
-       # Mask email
-       text = re.sub(r'[\w.-]+@[\w.-]+\.\w+', '[EMAIL]', text)
-       # Mask phone
-       text = re.sub(r'\d{3}-\d{3}-\d{4}', '[PHONE]', text)
-       return text
-   ```
-
-2. **Hashing**: One-way transformation for identification
-   ```python
-   import hashlib
-   
-   def hash_user_id(user_id):
-       return hashlib.sha256(user_id.encode()).hexdigest()[:8]
-   ```
-
-3. **Tokenization**: Replace with reference tokens
-
-4. **Exclusion**: Don't log sensitive fields at all
-
-### Compliance Considerations
-
-- **GDPR**: Right to erasure, data minimization
-- **HIPAA**: Healthcare data protection
-- **CCPA**: Consumer privacy rights
-
-## Cost Tracking
-
-### Metrics to Log
-
-| Metric | Description |
-|--------|-------------|
-| Input tokens | Tokens in prompts |
-| Output tokens | Tokens in completions |
-| API calls | Number of model calls |
-| Cache hits | Cached requests |
-| Embedding costs | Vectorization costs |
-
-### Cost Calculation
-
-```python
-def calculate_cost(input_tokens, output_tokens):
-    # Example pricing (GPT-4)
-    input_cost = input_tokens / 1000 * 0.03
-    output_cost = output_tokens / 1000 * 0.06
-    return input_cost + output_cost
-```
-
-## Agent Execution Tracing
-
-### What to Log
-
-1. **Tool Calls**: Which tools were invoked
-2. **Tool Inputs/Outputs**: Arguments and results
-3. **Decision Points**: Why certain actions were taken
-4. **Execution Time**: Per-step timing
-5. **Success/Failure**: Outcome of each step
-
-### Example Trace
-
-```json
-{
-  "trace_id": "trace_abc123",
-  "steps": [
-    {
-      "step": 1,
-      "tool": "search",
-      "input": {"query": "weather in NYC"},
-      "output": "Sunny, 72F",
-      "duration_ms": 120
-    },
-    {
-      "step": 2,
-      "tool": "respond",
-      "input": {"text": "Today's weather..."},
-      "output": "Generated response",
-      "duration_ms": 450
-    }
-  ]
-}
-```
-
-## Log Aggregation Tools
-
-### Popular Solutions
-
-| Tool | Use Case |
-|------|----------|
-| ELK Stack | Full-text search, analytics |
-| Splunk | Enterprise logging, compliance |
-| Datadog | APM + logging integration |
-| CloudWatch | AWS-native logging |
-| Loki | Grafana-integrated logging |
-
-### Implementation
-
-```python
-# Example: Sending logs to ELK
-import logging
-from elasticsearch import Elasticsearch
-
-class ElasticHandler(logging.Handler):
-    def __init__(self, es_host, index):
-        super().__init__()
-        self.es = Elasticsearch([es_host])
-        self.index = index
-    
-    def emit(self, record):
-        doc = self.format(record)
-        self.es.index(index=self.index, document=doc)
-```
-
-## Advanced Techniques
-
-### 1. Sampling
-
-Not every request needs full logging:
 ```python
 import random
-
-def should_log():
-    return random.random() < 0.1  # Log 10% of requests
+def should_log(is_error: bool, sample_rate: float = 0.1) -> bool:
+    return True if is_error else random.random() < sample_rate
 ```
 
-### 2. Async Logging
+---
 
-Don't block requests with logging:
+## 4. PII Redaction
+
+User prompts can contain emails, phone numbers, SSNs, credit cards, and pasted API keys. Redact **before** the record leaves the application boundary — once PII reaches a third-party log store, you have a compliance incident.
+
+| Strategy | When | Trade-off |
+|---|---|---|
+| **Redaction** | Default for prod logs | Loses debugging context |
+| **Hashing** | Identify same user/value without exposure | One-way, not reversible |
+| **Tokenization** | Need reversibility for internal use | Requires a secure token store |
+| **Exclusion** | Highly sensitive fields | No visibility at all |
+| **Encryption at rest** | All log storage | Performance overhead |
+
 ```python
-import asyncio
-import logging
-
-async def log_async(message):
-    await asyncio.to_thread(logging.info, message)
+import re
+PII = [
+    (re.compile(r"\b[\w.%+-]+@[\w.-]+\.[A-Za-z]{2,}\b"), "[EMAIL_REDACTED]"),
+    (re.compile(r"\bsk-[A-Za-z0-9]{8,}\b"),               "[API_KEY_REDACTED]"),
+    (re.compile(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b"),    "[PHONE_REDACTED]"),
+]
+def redact(text: str) -> str:
+    for pattern, repl in PII:
+        text = pattern.sub(repl, text)
+    return text
 ```
 
-### 3. Log-Based Metrics
+> Order matters: redact specific high-entropy patterns (API keys) before broad numeric ones (phones) so a generic pattern doesn't mangle a key. This is exactly what you implement in the exercise.
 
-Derive metrics from logs:
-- Error rate: Count errors / total requests
-- Latency percentiles: Parse latency values
-- Cost aggregation: Sum token costs
+---
 
-### 4. Retention Policies
+## 5. Correlation IDs & Distributed Tracing
 
-| Data Type | Retention |
-|-----------|-----------|
-| Full logs | 30 days |
-| Aggregated metrics | 1 year |
-| Audit logs | 7 years |
-| Error logs | 90 days |
+A single user request fans out across services (gateway → retriever → reranker → LLM). To reconstruct it, every log record and every span must carry shared IDs.
 
-## Summary
+| ID | Scope |
+|---|---|
+| `trace_id` | The whole request across all services |
+| `span_id` | One operation within the trace |
+| `request_id` | One request at one service |
+| `session_id` | A multi-turn conversation |
 
-Key logging components:
-1. **Structured JSON** for parseable logs
-2. **Correlation IDs** for tracing
-3. **PII handling** for compliance
-4. **Cost tracking** for budgeting
-5. **Agent traces** for debugging workflows
-6. **Appropriate retention** for storage efficiency
+**OpenTelemetry** is the vendor-neutral standard: instrument once, export to Jaeger, Tempo, Datadog, etc. A trace is a tree of spans:
+
+```
+trace_id = T1
+└─ span: rag.query                      (root)
+   ├─ span: retrieval        docs=5  avg_score=0.91
+   ├─ span: rerank           in=20  out=5
+   └─ span: llm.generation   model=gpt-4o  in=250 out=120  cost=$0.0019
+```
+
+```python
+# OpenTelemetry shape (illustrative — needs the SDK + an exporter)
+from opentelemetry import trace
+tracer = trace.get_tracer("rag")
+with tracer.start_as_current_span("rag.query") as root:
+    root.set_attribute("rag.top_k", 5)
+    with tracer.start_as_current_span("retrieval") as s:
+        s.set_attribute("retrieval.docs", 5)
+```
+
+---
+
+## 6. Log Aggregation
+
+Individual servers ship structured logs to a central pipeline that parses, enriches, routes, and stores them for search and alerting.
+
+```
+┌──────────┐ ┌──────────┐ ┌──────────┐
+│App Server│ │App Server│ │App Server│   (JSON logs)
+└────┬─────┘ └────┬─────┘ └────┬─────┘
+     └────────────┼────────────┘
+                  ▼
+        ┌───────────────────┐
+        │ Shipper           │  parse JSON, add host/region/version,
+        │ (Fluentd/Filebeat)│  route to the right index
+        └─────────┬─────────┘
+        ┌─────────┼──────────┐
+        ▼         ▼          ▼
+ ┌───────────┐ ┌────────┐ ┌──────┐
+ │Elasticsearch│ S3/GCS │ │ Loki │
+ │ (hot/search)│ archive │ │(opt) │
+ └─────┬───────┘ └────────┘ └──────┘
+       ▼
+   Grafana / Kibana  → dashboards, search, alerts
+```
+
+| Tool | Strength |
+|---|---|
+| ELK (Elasticsearch/Kibana) | Full-text search, analytics |
+| Splunk | Enterprise, compliance |
+| Datadog | APM + logs in one place |
+| CloudWatch | AWS-native |
+| Grafana Loki | Cost-effective, Grafana-integrated |
+
+---
+
+## 7. Retention Policies
+
+Keep logs long enough to debug and to satisfy compliance — and no longer (storage cost + privacy risk). Tier by access speed: hot (searchable) → warm → cold archive.
+
+| Log type | Hot | Warm | Cold archive | Total |
+|---|---|---|---|---|
+| Request/response | 7 days | 30 days | 1 year | 1 year |
+| Error logs | 30 days | 90 days | 2 years | 2 years |
+| Evaluation scores | 30 days | 1 year | 3 years | 3 years |
+| Audit logs | 90 days | 1 year | 7 years | 7 years |
+| Debug/trace | 3 days | — | — | 3 days |
+
+Compliance drivers: **GDPR** (data minimisation, right to erasure), **HIPAA** (healthcare data), **CCPA** (consumer privacy), **SOC 2** (security controls).
+
+---
+
+## Key Takeaways
+
+- **Structured beats prose.** Emit one JSON record per event with stable fields so logs can be queried, aggregated, and alerted on without fragile parsing.
+- **Redact PII at the boundary.** Strip emails, phones, SSNs, and API keys *before* records leave the process; choose redact / hash / tokenize / exclude per field, and order patterns so specific ones run before broad ones.
+- **Use levels and sampling.** Always log errors; sample INFO/DEBUG to control volume and cost while keeping the ability to turn detail up when debugging.
+- **Correlate everything.** Thread `trace_id` / `span_id` / `request_id` through every record and span so a multi-step request can be reconstructed end-to-end; OpenTelemetry is the vendor-neutral way to do it.
+- **Aggregate centrally, tier retention.** Ship structured logs to a pipeline (ELK / Loki / Datadog) and age them hot → warm → cold per type, balancing debuggability against cost and compliance (GDPR/HIPAA/CCPA/SOC 2).
