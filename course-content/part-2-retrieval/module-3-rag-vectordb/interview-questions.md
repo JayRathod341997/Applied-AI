@@ -951,3 +951,103 @@ def rag_with_cache(query):
 | **Advanced Techniques** | Re-ranking, query transformation, HyDE, contextual compression |
 | **Evaluation** | Precision, recall, MRR, faithfulness, answer relevance, RAGAS |
 | **Production** | Caching, incremental indexing, multi-tenancy, monitoring, cost control |
+
+---
+
+## Senior Deep Dive: pgvector on Azure Database for PostgreSQL
+
+> *Targeted at roles that standardize on PostgreSQL/Azure as the system of record. Interviewers probe whether you can avoid a separate vector DB and keep vectors next to transactional data.*
+
+### SQ1: When would you choose `pgvector` over a dedicated vector database like Pinecone or Weaviate?
+
+**Answer:** Choose `pgvector` (the PostgreSQL extension that adds a `vector` column type plus ANN indexes) when:
+
+- **You already run PostgreSQL** and want vectors co-located with relational/transactional data — one backup, one access-control model, one connection pool. Critical in regulated/risk domains where data residency and a single audit trail matter.
+- **Transactional consistency** is required: an embedding and its source row commit in the same ACID transaction — no dual-write skew between a SQL store and an external index.
+- **Scale is moderate** (~1–10M vectors per table comfortably; tens of millions with HNSW + partitioning and tuning).
+- **You want to filter then search** using rich SQL `WHERE` clauses (joins, RBAC, tenant_id, date ranges) in the same query.
+
+Choose a dedicated vector DB when you need >100M vectors, sub-10ms p99 at very high QPS, managed sharding/replication for vectors, or built-in hybrid/re-ranking features without building them yourself.
+
+**On Azure:** *Azure Database for PostgreSQL – Flexible Server* supports `pgvector` natively (enable via the `azure.extensions` server parameter). This is the common "no new infra" choice cited in Azure-centric JDs — pair it with Azure OpenAI embeddings.
+
+### SQ2: Walk through setting up and querying pgvector on Azure PostgreSQL.
+
+**Answer:**
+
+```sql
+-- 1. Enable the extension (must also be allow-listed in Azure server parameter azure.extensions)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 2. Table with an embedding column (dim must match the embedding model, e.g. 1536 for text-embedding-3-small)
+CREATE TABLE documents (
+    id          BIGSERIAL PRIMARY KEY,
+    tenant_id   UUID NOT NULL,
+    content     TEXT,
+    metadata    JSONB,
+    embedding   VECTOR(1536)
+);
+
+-- 3. Approximate index — HNSW for best recall/latency (preferred over IVFFlat for most workloads)
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+-- 4. Filtered ANN query: metadata filter + vector similarity in ONE statement
+SELECT id, content, 1 - (embedding <=> $1) AS cosine_similarity
+FROM documents
+WHERE tenant_id = $2
+  AND metadata->>'doc_type' = 'policy'
+ORDER BY embedding <=> $1      -- <=> cosine distance; <-> L2; <#> inner product
+LIMIT 5;
+```
+
+**Key operators:** `<=>` cosine distance, `<->` Euclidean (L2), `<#>` negative inner product. Match the operator class on the index (`vector_cosine_ops`) to the distance you query with, or the index won't be used.
+
+### SQ3: HNSW vs IVFFlat in pgvector — how do you choose and tune?
+
+**Answer:**
+
+| Aspect | HNSW | IVFFlat |
+|--------|------|---------|
+| Recall/latency | Higher recall, faster queries | Lower memory, faster build |
+| Build cost | Slower, more memory | Fast to build |
+| Tuning knobs | `m`, `ef_construction` (build); `ef_search` (query) | `lists` (build); `probes` (query) |
+| Best for | Most production RAG | Very large tables where build time/RAM dominates |
+
+- **HNSW query tuning:** `SET hnsw.ef_search = 100;` — higher = better recall, slower. Start ~40–100.
+- **IVFFlat:** set `lists ≈ rows / 1000` (up to ~sqrt(rows)); raise `ivfflat.probes` for recall. **Build the IVF index only after data is loaded** — it clusters existing rows.
+- Both are *approximate* — validate recall against a brute-force baseline on a sample before committing index params.
+
+### SQ4: How do you implement hybrid (keyword + vector) search in PostgreSQL?
+
+**Answer:** Combine `pgvector` similarity with PostgreSQL full-text search (`tsvector`/`ts_rank`) and fuse the scores — typically Reciprocal Rank Fusion (RRF):
+
+```sql
+WITH semantic AS (
+    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1) AS rank
+    FROM documents WHERE tenant_id = $2 ORDER BY embedding <=> $1 LIMIT 50
+),
+keyword AS (
+    SELECT id, ROW_NUMBER() OVER (
+        ORDER BY ts_rank(to_tsvector('english', content), plainto_tsquery($3)) DESC) AS rank
+    FROM documents
+    WHERE tenant_id = $2 AND to_tsvector('english', content) @@ plainto_tsquery($3)
+    LIMIT 50
+)
+SELECT COALESCE(s.id, k.id) AS id,
+       COALESCE(1.0/(60 + s.rank), 0) + COALESCE(1.0/(60 + k.rank), 0) AS rrf_score
+FROM semantic s FULL OUTER JOIN keyword k USING (id)
+ORDER BY rrf_score DESC LIMIT 10;
+```
+
+This catches exact-match terms (IDs, ticker symbols, regulation codes) that pure embeddings miss — valuable in finance/risk where precise terminology matters. For richer BM25, the `pg_search`/ParadeDB extension is an alternative where available.
+
+### SQ5: Production concerns for pgvector at scale (the senior-level answer).
+
+**Answer:**
+- **Index memory:** HNSW graphs live in memory for fast search. Size the Azure SKU (memory-optimized tiers) for roughly `rows × dim × 4 bytes × overhead`. Monitor cache hit ratio.
+- **Write amplification:** Inserts update the HNSW graph — bulk-load first, then index; or use partitioned tables and reindex partitions.
+- **Multi-tenancy:** Filter by `tenant_id`; for hard isolation use partitioning or row-level security (RLS). Note: heavy `WHERE` filtering can degrade ANN recall (post-filtering drops candidates) — over-fetch (`LIMIT 50` then filter to 5) or use partitioned indexes per tenant.
+- **Dimensionality:** pgvector indexes support up to 2000 dims; for larger, truncate (Matryoshka) embeddings or use `halfvec` (fp16, ~50% space).
+- **HA/DR on Azure:** Flexible Server zone-redundant HA + read replicas; embeddings replicate with the row — no separate vector-store DR plan.
+- **Cost vs dedicated DB:** No extra service, but you pay in DB CPU/RAM and operational tuning — the trade-off the interviewer wants articulated.

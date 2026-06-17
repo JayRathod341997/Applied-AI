@@ -488,6 +488,37 @@ Variations include:
 
 ---
 
+## Senior Deep Dive: Hallucination Mitigation & Synthetic Data
+
+> *Senior GenAI roles probe these heavily — a confident wrong answer is a liability in regulated/risk settings, and synthetic data is a standard lever for training domain models without exposing real data.*
+
+### Q: Why do LLMs hallucinate, and how do you reduce it in production?
+
+**Answer:** LLMs are trained to produce *fluent, probable* next tokens, not *true* ones — there is no built-in truth model. Hallucination arises from missing/contradictory training knowledge, lossy parametric memory, ambiguous prompts, high-temperature decoding, and pressure to always answer (sycophancy). Mitigation is layered — no single fix:
+
+1. **Ground with RAG** — supply authoritative context and instruct "answer only from the context; if absent, say you don't know."
+2. **Force citations** — require the model to quote the supporting source span; reject answers with none.
+3. **Constrain decoding** — lower temperature, structured/JSON output with schema validation.
+4. **Verification pass** — a second model/check scores the answer against the context (groundedness/faithfulness; Azure AI groundedness detection does this as a service).
+5. **Self-consistency** — sample multiple answers and take the consistent one for reasoning tasks.
+6. **Guardrails & abstention** — confidence thresholds, "refuse if unsupported," human-in-the-loop for high-stakes outputs.
+7. **Fine-tuning + RLHF/DPO** — for domain grounding and to reward honesty.
+8. **Measure it** — track faithfulness/groundedness (RAGAS, Azure evaluators) in CI and on prod samples; treat regressions as defects.
+
+Senior framing: you **cannot eliminate** hallucination — you **bound and detect** it, and design the product so an unsupported answer is caught or escalated.
+
+### Q: Distinguish factual vs faithfulness hallucination — why does it matter for RAG?
+
+**Answer:** **Factual** = output contradicts the real world (wrong fact from parametric memory). **Faithfulness** = output isn't supported by the *provided context*, even if coincidentally true. In RAG you primarily engineer for **faithfulness/groundedness** (does each claim trace to a retrieved span?) — measurable without world knowledge. A faithful-but-wrong-retrieval answer points at the *retriever*; an unfaithful answer points at the *generator/prompt*.
+
+### Q: What is synthetic data, why use it to train/fine-tune LLMs, and what are the risks?
+
+**Answer:** **Synthetic data** is artificially generated training data — often produced by a stronger LLM (distillation), simulation, or augmentation. **Why use it:** scarcity/cost (bootstrap instruction/domain data), **privacy** (train without exposing PII/PHI — pairs with differential privacy), **coverage** (generate rare/edge cases like rare fraud patterns), **alignment** (synthetic preference pairs for SFT/DPO), and **evaluation** (test sets, red-team prompts at scale).
+
+**Risks to raise:** **model collapse** (training repeatedly on model-generated data degrades diversity and amplifies errors — mix with real data, cap synthetic ratio), **bias amplification**, **propagated factual errors** (inherits the teacher's hallucinations — needs filtering), **licensing/ToS** (distilling some commercial models may violate terms), and **privacy is not automatic** (naive synthetic data can still leak source records). Best practice: treat it as a pipeline — generate → filter (quality, dedup, toxicity, factuality) → balance with real data → validate downstream impact.
+
+---
+
 ## Summary
 
 Key topics covered in this interview guide:

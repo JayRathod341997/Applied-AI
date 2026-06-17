@@ -617,6 +617,40 @@ Level 5 — MLOps Mature
 
 ---
 
+## Senior Deep Dive: Deploying GenAI on Azure (AI Foundry, Azure OpenAI, Azure ML, AKS)
+
+> *For Azure-centric roles. Interviewers want you to pick the right Azure surface for a workload and reason about quota, cost, latency, and enterprise security.*
+
+### Q: What is Azure AI Foundry and how does it relate to Azure OpenAI and Azure ML?
+
+**Answer:** **Azure AI Foundry** (formerly Azure AI Studio) is the unified platform/SDK for building, evaluating, and deploying generative-AI apps on Azure. Layers: a **model catalog** (Azure OpenAI models + open models like Llama/Mistral/Phi, deployable as **serverless APIs / MaaS pay-per-token** or to **managed compute**); **Azure OpenAI Service** (managed OpenAI endpoints in *your* tenant — private networking, RBAC, regional control, content filtering — what enterprises use instead of api.openai.com); **Foundry capabilities** (prompt flow, evaluations, tracing, content safety, agent service, fine-tuning); and **Azure Machine Learning** (broader MLOps for any model, classic ML included — pipelines, registry, managed endpoints). Framing: **Foundry = GenAI app lifecycle; Azure OpenAI = hosted frontier models; Azure ML = general MLOps + custom/open models.**
+
+### Q: Serverless API (MaaS/PTU) vs Managed Online Endpoint vs self-hosted on AKS — how do you choose?
+
+**Answer:**
+
+| Option | What it is | Choose when |
+|--------|-----------|-------------|
+| **Serverless API / PTU** | Pay-per-token, or **Provisioned Throughput Units** for reserved capacity | Fastest to ship, no infra; PTU for predictable high volume, latency SLAs, quota guarantees |
+| **Managed Online Endpoint (Azure ML)** | Azure-managed real-time endpoint with autoscale | You bring a fine-tuned/open/custom model but don't want to run K8s |
+| **Self-hosted on AKS** (vLLM/Triton) | Your own GPU cluster | Max control over batching/quantization, data stays in-cluster, multi-model, cost at scale |
+
+Key lever: **PTU (Provisioned Throughput)** trades a fixed reservation for guaranteed throughput + stable latency (size from peak tokens/min). Below break-even volume PAYG is cheaper; above it PTU wins and protects against 429 throttling.
+
+### Q: How do you handle Azure OpenAI quota, throttling, and high availability?
+
+**Answer:** Quota is **per-region, per-model, in TPM (tokens/min) and RPM** — design within it. Handle **429s** with exponential backoff + jitter and respect `Retry-After`. HA pattern: put **Azure API Management (APIM)** or a gateway in front of **multiple** Azure OpenAI deployments across regions and **load-balance/failover** (the "AOAI smart load balancer" pattern) — spreads load across quota pools and survives a regional incident. Use **PTU for baseline + PAYG spillover** for burst, **semantic/exact caching** (Azure Cache for Redis) for repeated prompts, and the **Batch API** for non-real-time bulk jobs at lower cost.
+
+### Q: How do you secure an enterprise Azure OpenAI / Foundry deployment?
+
+**Answer:** **Identity** — Microsoft Entra ID + **Managed Identity** (no API keys in code); least-privilege RBAC. **Network** — **Private Endpoints / VNet integration**, disable public access, egress control; region pinning / **EU Data Boundary** for residency. **Secrets** — Azure Key Vault. **Data protection** — Azure OpenAI does **not** train on your prompts/completions and isolates per tenant (document for compliance); CMK for at-rest encryption. **Safety** — Content Safety filters + prompt shields + groundedness at the gateway. **Auditability** — Azure Monitor / Log Analytics + Microsoft Purview for full request logging and lineage (also feeds the model-risk audit trail).
+
+### Q: Describe an end-to-end MLOps/LLMOps pipeline on Azure.
+
+**Answer:** (1) **Source/data** — Azure Repos/GitHub for code+prompts; Data Lake/Blob + Purview for data. (2) **Train/build** — Azure ML pipelines or Foundry fine-tuning; track with **MLflow** (native). (3) **Register** — versioned model + prompt + eval artifacts in the **Azure ML registry** with model cards. (4) **Evaluate (the LLM gate)** — **Foundry evaluations** (groundedness/relevance/coherence/safety) in CI; block promotion on regression. (5) **CI/CD** — Azure DevOps or GitHub Actions → staging endpoint → automated eval → **canary/blue-green** promotion to a managed endpoint or PTU deployment. (6) **Monitor** — Azure Monitor + App Insights for latency/cost/tokens; Azure ML drift monitors; online groundedness/safety sampling → retrain/rollback loop. (7) **Govern** — human-in-the-loop for high-risk, audit logs, periodic revalidation. The senior signal: the **eval gate and rollback loop are first-class, not bolted on**.
+
+---
+
 *References:*
 - *[01 Deployment Overview →](01_deployment_overview/README.md)*
 - *[02 Deployment Techniques →](02_deployment_techniques/README.md)*

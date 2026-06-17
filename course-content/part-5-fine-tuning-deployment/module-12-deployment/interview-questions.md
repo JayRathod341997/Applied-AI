@@ -714,4 +714,66 @@ kubectl exec -it llm-server-0 -- ping llm-server-1
 
 ---
 
+## Senior Deep Dive: Deploying GenAI on Azure (Azure AI Foundry, Azure OpenAI, Azure ML, AKS)
+
+> *For Azure-centric roles. Interviewers want to know you can pick the right Azure surface for a workload, reason about quota/cost/latency, and run it securely in an enterprise tenant.*
+
+### SQ1: What is Azure AI Foundry and how does it relate to Azure OpenAI and Azure ML?
+
+**Answer:** **Azure AI Foundry** (formerly Azure AI Studio) is the unified platform/SDK for building, evaluating, and deploying generative-AI applications on Azure. Mental model of the layers:
+
+- **Model catalog** — Azure OpenAI models (GPT-4o, o-series), plus open models (Llama, Mistral, Phi) and partner models, deployable as **serverless APIs (MaaS, pay-per-token)** or to **managed compute**.
+- **Azure OpenAI Service** — the managed endpoint for OpenAI models in *your* Azure tenant (private networking, RBAC, regional control, content filtering). This is what enterprises use instead of api.openai.com for data-residency and compliance.
+- **Foundry capabilities** — prompt flow (orchestration), evaluations, tracing, content safety, agent service, and fine-tuning, all wired together.
+- **Azure Machine Learning (Azure ML)** — the broader MLOps platform (custom training, pipelines, model registry, managed online/batch endpoints) for *any* model, classic ML included. Foundry builds on and integrates with it.
+
+Senior framing: **Foundry = GenAI app lifecycle; Azure OpenAI = the hosted frontier models; Azure ML = general MLOps + custom/open models.** They compose; you pick the entry point by workload.
+
+### SQ2: Serverless API (MaaS) vs Managed Online Endpoint vs self-hosted on AKS — how do you choose?
+
+**Answer:**
+
+| Option | What it is | Choose when |
+|--------|-----------|-------------|
+| **Serverless API / PTU** | Pay-per-token (PAYG) or **Provisioned Throughput Units** for reserved capacity | Fastest to ship, no infra; PTU for predictable high-volume, latency SLAs, and quota guarantees |
+| **Managed Online Endpoint (Azure ML)** | Azure-managed real-time endpoint backing your model/container with autoscale | You bring a fine-tuned/open/custom model but don't want to operate K8s |
+| **Self-hosted on AKS** (vLLM/Triton) | Your own GPU cluster | Max control over batching/quantization, data never leaves your cluster, multi-model, cost optimization at scale |
+
+Key cost lever to mention: **PTU (Provisioned Throughput)** trades a fixed monthly reservation for guaranteed throughput and stable latency — you size PTUs from peak tokens/min. Below the break-even volume, PAYG is cheaper; above it, PTU wins and protects you from throttling (429s).
+
+### SQ3: How do you handle Azure OpenAI quota, throttling, and high availability?
+
+**Answer:**
+- **Quota is per-region, per-model, measured in TPM (tokens/min) and RPM (requests/min).** You design within it, not around 429s after the fact.
+- **Handle 429s** with exponential backoff + jitter and respect `Retry-After`; the SDK does some of this but you own the policy.
+- **Scale/HA pattern:** put **Azure API Management (APIM)** or a gateway in front of *multiple* Azure OpenAI deployments across regions and **load-balance / failover** (the "AOAI smart load balancer" pattern). Spreads load across quota pools and survives a regional incident.
+- **PTU + spillover:** reserved PTU deployment for baseline, PAYG deployment for burst spillover.
+- **Caching:** semantic/exact cache (e.g. Azure Cache for Redis) for repeated prompts to cut tokens and latency.
+- **Batch API** for non-real-time bulk jobs at lower cost.
+
+### SQ4: How do you secure an enterprise Azure OpenAI / Foundry deployment?
+
+**Answer (the controls an enterprise interviewer expects):**
+- **Identity:** Microsoft Entra ID + **Managed Identity** for service-to-service auth — *no API keys in code/config*; RBAC scoped to least privilege.
+- **Network:** **Private Endpoints / VNet integration**, disable public network access, egress control; data stays on the Microsoft backbone. Use the **EU Data Boundary** / region pinning for residency.
+- **Secrets:** Azure Key Vault for any remaining secrets; Key Vault references in App Config.
+- **Data protection:** Azure OpenAI does **not** use your prompts/completions to train models and isolates data per tenant; document this for compliance reviews. Customer-managed keys (CMK) for at-rest encryption.
+- **Safety:** Azure AI Content Safety filters + prompt shields + groundedness checks at the gateway.
+- **Auditability:** Azure Monitor / Log Analytics + Microsoft Purview for full request logging and data lineage (also feeds the model-risk audit trail).
+
+### SQ5: Describe an end-to-end MLOps/LLMOps pipeline on Azure.
+
+**Answer:**
+1. **Source & data:** Git (Azure Repos/GitHub) for code/prompts; Azure Data Lake / Blob + Purview for data; feature store if classic ML.
+2. **Train/build:** Azure ML pipelines or Foundry fine-tuning; track experiments and lineage with **MLflow** (native in Azure ML).
+3. **Register:** versioned model + prompt + eval artifacts in the **Azure ML model registry** with model cards.
+4. **Evaluate (the LLM gate):** **Azure AI Foundry evaluations** — groundedness, relevance, coherence, safety — run in CI; block promotion on regression. For classic ML, accuracy/AUC + Responsible AI scorecard.
+5. **CI/CD:** Azure DevOps Pipelines or GitHub Actions → deploy to staging endpoint → automated eval → **canary/blue-green** promotion to production (managed endpoint or PTU deployment).
+6. **Monitor:** Azure Monitor + Application Insights for latency/cost/tokens; data & model drift monitors in Azure ML; online groundedness/safety sampling; alerting → retrain/rollback loop.
+7. **Govern:** human-in-the-loop for high-risk paths, audit logs, periodic revalidation.
+
+The thing that signals seniority here: the **evaluation gate and rollback loop** are first-class, not bolted on — promotion is automated *and* guarded.
+
+---
+
 *End of Module 12 Interview Questions*

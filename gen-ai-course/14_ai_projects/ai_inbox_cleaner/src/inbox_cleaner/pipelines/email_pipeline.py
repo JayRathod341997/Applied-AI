@@ -116,7 +116,7 @@ class EmailPipeline:
         }
 
     async def sync_new_emails(self) -> List[Dict]:
-        messages = self.gmail.list_messages(query="is:unread category:primary newer_than:31d", max_results=2)
+        messages = self.gmail.list_messages(query="is:unread category:primary newer_than:31d", max_results=5)
         results = []
         for msg in messages:
             full_msg = self.gmail.get_message(msg["id"])
@@ -125,6 +125,7 @@ class EmailPipeline:
                 email_data["id"] = msg["id"]
                 result = await self.process_email(email_data)
                 results.append(result)
+        print(len(results))
         return results
 
     def _parse_message(self, message: Dict) -> Dict:

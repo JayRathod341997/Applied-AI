@@ -540,3 +540,66 @@ Provide scores and brief justification for each."""
 | **Limitations** | Hallucinations, context window, bias, knowledge cutoff |
 | **Ethics** | Fairness, transparency, privacy, accountability, safety |
 | **Production** | RAG vs fine-tuning, evaluation, monitoring, security |
+
+---
+
+## Senior Deep Dive: Hallucination Mitigation & Synthetic Data
+
+> *These two come up constantly for senior GenAI roles, especially in regulated/risk settings where a confident wrong answer is a liability. The JD explicitly calls out hallucination experience and synthetic data to train LLMs.*
+
+### SQ1: Why do LLMs hallucinate, and how do you reduce it in production?
+
+**Answer:** LLMs are trained to produce *fluent, probable* next tokens, not *true* ones — there is no built-in truth model. Hallucination arises from: missing/contradictory training knowledge, lossy parametric memory, ambiguous prompts, decoding randomness (high temperature), and pressure to always answer (sycophancy / no "I don't know").
+
+Mitigation is layered — no single fix:
+
+1. **Ground with RAG** — supply authoritative context and instruct "answer only from the context; if absent, say you don't know." Cuts factual hallucination the most.
+2. **Force citations / attribution** — require the model to quote the source span; an answer with no supporting span is rejected.
+3. **Constrain decoding** — lower temperature, structured/JSON output with schema validation for factual tasks.
+4. **Verification pass** — a second model (or the same one) checks the answer against the context (LLM-as-judge "groundedness/faithfulness" check; Azure AI **groundedness detection** does this as a service).
+5. **Self-consistency / ensembling** — sample multiple answers and take the consistent one for reasoning tasks.
+6. **Guardrails & abstention** — confidence thresholds, "refuse if unsupported," human-in-the-loop for high-stakes outputs.
+7. **Fine-tuning** for domain grounding and on-distribution behavior, plus RLHF/DPO to reward honesty.
+8. **Measure it** — track a faithfulness/groundedness metric (RAGAS, Azure evaluators) in CI and on prod samples; treat regressions as defects.
+
+Senior framing: you **cannot eliminate** hallucination — you **bound and detect** it, and you design the product so an unsupported answer is caught or escalated rather than silently shown.
+
+### SQ2: Distinguish factual vs faithfulness hallucination — why does the distinction matter for RAG?
+
+**Answer:**
+- **Factual hallucination** — output contradicts the real world (wrong fact from parametric memory).
+- **Faithfulness hallucination** — output contradicts or isn't supported by the *provided context*, even if coincidentally true.
+
+In RAG you primarily engineer for **faithfulness/groundedness**: the system's job is to be faithful to retrieved sources. This is measurable without world knowledge (does each claim trace to a retrieved span?), which is why production RAG evals center on groundedness + answer-relevance + context-precision/recall. A faithful-but-retrieval-was-wrong answer points you at the *retriever*; an unfaithful answer points at the *generator/prompt*.
+
+### SQ3: What is synthetic data, why use it to train/fine-tune LLMs, and what are the risks?
+
+**Answer:** **Synthetic data** is artificially generated training data — often produced by a stronger LLM (distillation), simulation, or augmentation — rather than collected from real users.
+
+**Why use it:**
+- **Scarcity / cost** — bootstrap instruction or domain data when labeled real data is unavailable or expensive.
+- **Privacy** — generate realistic but non-identifiable records so you can train without exposing PII/PHI (key in finance/health/risk; pairs with differential privacy).
+- **Coverage / edge cases** — deliberately generate rare classes, adversarial inputs, and long-tail scenarios (e.g. rare fraud patterns) to balance datasets.
+- **Alignment data** — synthetic preference pairs and instruction–response pairs for SFT/RLHF/DPO.
+- **Evaluation** — build test sets and red-team prompts at scale.
+
+**Risks the interviewer wants you to raise:**
+- **Model collapse / distribution drift** — training repeatedly on model-generated data degrades diversity and amplifies errors; mix with real data and cap synthetic ratio.
+- **Bias amplification** — the generator's biases get baked in and magnified.
+- **Factual errors propagate** — synthetic data inherits the teacher's hallucinations; needs filtering/verification.
+- **Licensing/ToS** — distilling from some commercial models may violate terms.
+- **Privacy is not automatic** — naive synthetic data can still leak/memorize source records; validate with privacy metrics or DP guarantees.
+
+**Best practice:** treat synthetic data as a pipeline — generate → filter (quality, dedup, toxicity, factuality) → balance with real data → validate downstream impact, never "more synthetic = better." On Azure this is a common pattern: use a frontier model to generate domain examples, filter, then fine-tune a smaller deployable model.
+
+### SQ4: A stakeholder says "the model lies — make it stop." How do you respond as a senior engineer?
+
+**Answer:** Reframe and operationalize:
+1. **Set expectations** — you cannot guarantee 0% hallucination; you can drive it below a measurable threshold and detect the rest.
+2. **Quantify** — define a groundedness/faithfulness metric and current baseline on real traffic before promising anything.
+3. **Apply the layered mitigations** (RAG grounding, citations, low temperature, verification, abstention) and re-measure.
+4. **Design for failure** — for high-stakes outputs, add human review or "I'm not certain" abstention so a wrong answer is contained, not shipped.
+5. **Monitor in prod** — sample and score groundedness continuously; alert on regression.
+6. **Communicate the trade-off** — stricter grounding/abstention reduces hallucination but lowers answer coverage; the business chooses the operating point.
+
+This shows expectation management + measurement + engineering + governance — the senior signal.

@@ -321,3 +321,54 @@ D) Use a different vector database
 | 17-21 | Good | Review weak areas before proceeding |
 | 12-16 | Fair | Re-read concepts.md and retry |
 | Below 12 | Needs Work | Study the module thoroughly before advancing |
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (pgvector on Azure PostgreSQL)
+
+> Self-contained — answer is shown directly after each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. You already run Azure Database for PostgreSQL and need vector search for ~2M documents co-located with relational metadata. What is the most appropriate choice?
+
+A) Stand up a separate Pinecone cluster and dual-write  
+B) Enable the `pgvector` extension and add a `VECTOR` column with an HNSW index  
+C) Store embeddings as JSON arrays and compute cosine in application code  
+D) Migrate everything to a graph database  
+
+**Answer: B** — `pgvector` keeps vectors next to transactional data with one ACID transaction, one backup, and one access-control model — ideal at this scale and for regulated audit trails. A dedicated DB is justified only at much larger scale / QPS.
+
+### BQ2. In pgvector, which index type generally gives the best recall/latency for production RAG, and which query-time knob trades recall for speed?
+
+A) IVFFlat; `lists`  
+B) HNSW; `hnsw.ef_search`  
+C) B-tree; `work_mem`  
+D) GiST; `probes`  
+
+**Answer: B** — HNSW is preferred for most production RAG; raising `hnsw.ef_search` increases recall at the cost of latency. (IVFFlat uses `lists`/`probes` and must be built after data is loaded.)
+
+### BQ3. Which pgvector operator corresponds to cosine distance, and what must match for the index to be used?
+
+A) `<->`; nothing needs to match  
+B) `<#>`; the table must be unlogged  
+C) `<=>`; the index operator class (`vector_cosine_ops`) must match the query distance  
+D) `=`; the column must be `NOT NULL`  
+
+**Answer: C** — `<=>` is cosine distance; the index's operator class must match the distance you query with or PostgreSQL falls back to a sequential scan.
+
+### BQ4. Heavy `WHERE tenant_id = ...` filtering on an HNSW query returns too few results. What is the standard fix?
+
+A) Drop the HNSW index  
+B) Over-fetch (e.g. `LIMIT 50`) then filter to the final top-k, or use per-tenant partitioned indexes  
+C) Lower `ef_construction` to 1  
+D) Switch the distance metric to Euclidean  
+
+**Answer: B** — post-filtering an approximate search can drop candidates, hurting recall; over-fetch then filter, or isolate tenants with partitioned indexes / RLS.
+
+### BQ5. Which is a genuine trade-off of pgvector vs a dedicated vector database?
+
+A) pgvector cannot do similarity search at all  
+B) pgvector adds no operational cost  
+C) You avoid a new service, but pay in DB CPU/RAM and tuning, and it's less suited to >100M vectors at very high QPS  
+D) Dedicated vector DBs are always cheaper  
+
+**Answer: C** — the senior trade-off: simplicity and consistency vs raw scale/throughput ceilings and added DB resource pressure.

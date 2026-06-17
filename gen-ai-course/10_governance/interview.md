@@ -384,6 +384,32 @@ Both needed: Governance defines rules, guardrails enforce them
 
 ---
 
+## Senior Deep Dive: AI in Risk Management & Responsible AI (Regulated/Global)
+
+> *For roles deploying AI/ML in risk management at global, regulated enterprises. Interviewers test whether you can ship models that survive model-risk audits, regulators, and independent challenge — not just accurate ones.*
+
+### Q: What is Model Risk Management (MRM) and how does SR 11-7 shape how you build models?
+
+**Answer:** **MRM** is the discipline of identifying, measuring, and controlling the risk that a model is wrong or misused. The foundational guidance is the US Fed/OCC **SR 11-7**; the UK equivalent is the PRA's **SS1/23**. Engineering implications: build for **"effective challenge"** by an independent validation function (documented assumptions, reproducible training, data lineage); operate the **three lines of defence** (developers → independent validation/MRM → internal audit); govern the **full lifecycle** (development → validation → approval → monitoring → revalidation → retirement); maintain a **model inventory** with risk tiers (materiality × complexity) driving validation depth; and provide **conceptual soundness + outcomes analysis + benchmarking**, not just a test metric. **LLM wrinkle:** SR 11-7 predates GenAI — a non-deterministic, third-party, opaque LLM stresses reproducibility, explainability, and vendor dependency. Senior move: treat the *whole system* (prompts + retrieval + guardrails + pinned model version) as the model under management, log all I/O, and add LLM-specific validation (hallucination rate, jailbreak resistance, prompt-injection tests).
+
+### Q: How do you make a credit/risk model explainable enough for regulators and adverse-action notices?
+
+**Answer:** Two layers. **(1) Intrinsic interpretability** where possible — regulators (e.g. ECOA/Reg B requiring adverse-action reason codes) favor explainable models: logistic regression / scorecards (WoE binning) or **monotonic-constrained GBMs** (`monotone_constraints`) that enforce sensible directionality (more missed payments never lowers risk). **(2) Post-hoc explanations** for complex models — **SHAP** (locally accurate, consistent; the de-facto standard for per-decision reason codes), **LIME** (cheaper, less stable), **counterfactuals** ("minimal change that flips the decision" → maps to recourse), and PDP/ALE for global behavior. Nuance: SHAP gives *attribution*, not a legally sufficient *reason* — you must map features to human-readable, non-discriminatory, stable reason codes and watch proxy features (ZIP proxying race). For LLMs, "explainability" becomes citation/grounding + decision logs, not SHAP.
+
+### Q: How do you detect and mitigate bias/fairness in a risk model?
+
+**Answer:** **Measure** across protected groups with complementary, sometimes-conflicting metrics: demographic parity (equal approval rates), equal opportunity (equal TPR), equalized odds (equal TPR **and** FPR), disparate-impact ratio (<0.8 = "four-fifths rule" flag), and within-group calibration. Cite the **impossibility result**: you generally can't satisfy calibration *and* equalized odds when base rates differ — fairness is a business/legal trade-off. **Mitigate** at three stages: pre-processing (reweighing, resampling), in-processing (fairness constraints / adversarial debiasing), post-processing (group thresholds — legally sensitive, get counsel). Tools: **Fairlearn** (tight with Azure ML), AIF360.
+
+### Q: Which regulations/frameworks must a global AI risk system account for?
+
+**Answer:** **EU AI Act** (risk-tiered; credit scoring & insurance pricing are **high-risk** → conformity assessment, risk-management system, data governance, human oversight, logging, transparency; phased 2025–2027); **GDPR Art. 22** (no solely-automated decisions with significant effect without meaningful human review + explanation); **SR 11-7 / PRA SS1/23** (MRM); **NIST AI RMF** (Govern/Map/Measure/Manage) and certifiable **ISO/IEC 42001**; sector rules (Basel capital models, IFRS 9 / CECL expected-credit-loss, fair-lending ECOA/FCRA); and **data residency/sovereignty** (Azure region selection, EU Data Boundary). Map each to concrete controls so an auditor sees evidence (model inventory, validation reports, monitoring logs, human-oversight records), not intentions.
+
+### Q: How do you operationalize responsible AI on Azure specifically?
+
+**Answer:** Map principles to services: **Azure ML Responsible AI dashboard** (error analysis, SHAP interpretability, Fairlearn fairness, counterfactuals, causal analysis → exportable **Responsible AI scorecard** as audit evidence); **Azure AI Content Safety** (hate/sexual/violence/self-harm filters, **prompt shields** for jailbreak/injection, **groundedness detection** for ungrounded RAG answers); **Azure AI Foundry evaluations** (groundedness/relevance/coherence/safety in CI and on prod samples); **model cards + MLflow lineage** in the Azure ML registry; **Microsoft Purview** (data classification, lineage, DLP); and **human-in-the-loop + full request/response logging** (Azure Monitor / Log Analytics) for Art. 22 and the audit trail.
+
+---
+
 ## Summary
 
 Key governance topics:

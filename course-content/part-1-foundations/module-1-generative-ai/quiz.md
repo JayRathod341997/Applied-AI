@@ -261,3 +261,54 @@ D) Accountability
 | 14-17 | Good | Review weak areas before proceeding |
 | 10-13 | Fair | Re-read concepts.md and retry |
 | Below 10 | Needs Work | Study the module thoroughly before advancing |
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (Hallucination & Synthetic Data)
+
+> Self-contained — answer follows each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. In a RAG system, which metric most directly measures whether each claim in the answer traces to the retrieved context?
+
+A) Perplexity  
+B) Groundedness / faithfulness  
+C) BLEU score  
+D) Token throughput  
+
+**Answer: B** — RAG engineering targets faithfulness/groundedness (claims supported by retrieved spans), measurable without world knowledge.
+
+### BQ2. An LLM returns a fact that happens to be true but is not supported by the provided context. This is best described as:
+
+A) A factual hallucination  
+B) A faithfulness hallucination  
+C) Correct behavior, no issue  
+D) A tokenization error  
+
+**Answer: B** — it's unfaithful to the context even though coincidentally true; this points you at the generator/prompt, not the retriever.
+
+### BQ3. Which is NOT a valid hallucination-mitigation technique?
+
+A) Grounding with RAG and requiring citations  
+B) Lowering temperature and validating against a schema  
+C) Raising temperature to maximize creativity for factual answers  
+D) A verification pass / groundedness check before returning the answer  
+
+**Answer: C** — higher temperature increases variability and hallucination risk for factual tasks; mitigation favors lower temperature plus grounding and verification.
+
+### BQ4. What is "model collapse" in the context of training on synthetic data?
+
+A) The GPU running out of memory  
+B) Progressive loss of diversity and amplification of errors when models are repeatedly trained on model-generated data  
+C) A model file becoming corrupted on disk  
+D) The API returning a 500 error  
+
+**Answer: B** — mitigate by mixing with real data, capping the synthetic ratio, and filtering generated samples.
+
+### BQ5. A primary legitimate reason to use synthetic data in a regulated risk domain is:
+
+A) It is always more accurate than real data  
+B) Privacy — generate realistic non-identifiable records (and rare edge cases like fraud) to train without exposing PII/PHI  
+C) It eliminates the need for any evaluation  
+D) It guarantees zero bias  
+
+**Answer: B** — privacy preservation and edge-case coverage are key drivers; synthetic data still requires filtering, balancing with real data, and downstream validation (and isn't automatically private).

@@ -321,7 +321,7 @@ Limitations: Potential bias, expensive
 1. **Inspect Retrieved Chunks:** Are they relevant?
 2. **Check Similarity Scores:** Are matches strong enough?
 3. **Test Query Embedding:** Is query well-formed?
-4. **Review Chunking:** Are chunks coherent?
+4. **Review Chunking:** Are chunks coherent (logical, clear, and easy to understand)?
 5. **Verify Index:** Is data properly indexed?
 6. **Analyze Failure Cases:** Look for patterns
 
@@ -529,6 +529,51 @@ Fixes:
 - **Context Limits:** Still bounded by LLM context window
 - **Cost:** Both retrieval and generation costs
 - **No Learning:** Doesn't improve from user interactions
+
+---
+
+## Senior Deep Dive: pgvector on Azure Database for PostgreSQL
+
+> *For Azure/PostgreSQL-centric roles. Interviewers probe whether you can avoid a separate vector DB and keep vectors next to transactional data.*
+
+### Q: When would you choose `pgvector` over a dedicated vector database (Pinecone/Weaviate)?
+
+**Answer:** Choose `pgvector` (the PostgreSQL extension adding a `vector` type + ANN indexes) when you **already run PostgreSQL** and want vectors co-located with relational data — one backup, one access-control model, one audit trail (critical in regulated/risk domains); when you need **transactional consistency** (embedding + source row commit in the same ACID transaction — no dual-write skew); at **moderate scale** (~1–10M vectors per table, more with partitioning); and when you want to **filter-then-search** with rich SQL `WHERE` (joins, RBAC, tenant_id, dates). Choose a dedicated vector DB for >100M vectors, sub-10ms p99 at very high QPS, managed vector sharding, or built-in hybrid/re-ranking. **On Azure:** *Azure Database for PostgreSQL – Flexible Server* supports `pgvector` natively (enable via the `azure.extensions` server parameter) — pair it with Azure OpenAI embeddings.
+
+### Q: Show pgvector setup and a filtered similarity query on Azure.
+
+**Answer:**
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;          -- also allow-list in azure.extensions
+
+CREATE TABLE documents (
+    id BIGSERIAL PRIMARY KEY, tenant_id UUID NOT NULL,
+    content TEXT, metadata JSONB, embedding VECTOR(1536)   -- dim matches the embedding model
+);
+
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);        -- HNSW: best recall/latency
+
+SELECT id, content, 1 - (embedding <=> $1) AS cosine_similarity
+FROM documents
+WHERE tenant_id = $2 AND metadata->>'doc_type' = 'policy'
+ORDER BY embedding <=> $1 LIMIT 5;              -- <=> cosine, <-> L2, <#> inner product
+```
+
+Match the index operator class (`vector_cosine_ops`) to the distance you query with, or the index won't be used.
+
+### Q: HNSW vs IVFFlat in pgvector — how do you choose and tune?
+
+**Answer:** **HNSW** — higher recall, faster queries, slower/heavier build; tune `m`, `ef_construction` (build) and `hnsw.ef_search` (query, ~40–100, higher = better recall/slower). **IVFFlat** — lower memory, fast build; set `lists ≈ rows/1000`, raise `ivfflat.probes` for recall, and **build only after loading data** (it clusters existing rows). Prefer HNSW for most production RAG; IVFFlat when build time/RAM dominate. Both are approximate — validate recall vs a brute-force baseline before fixing params.
+
+### Q: How do you do hybrid (keyword + vector) search in PostgreSQL, and why?
+
+**Answer:** Combine `pgvector` similarity with full-text search (`tsvector`/`ts_rank`) and fuse via Reciprocal Rank Fusion (RRF): rank each list, score `1/(60+rank)`, sum across lists, order by the sum. This catches exact-match terms (IDs, ticker symbols, regulation codes) that pure embeddings miss — valuable in finance/risk where precise terminology matters. For stronger BM25, the `pg_search`/ParadeDB extension is an option where available.
+
+### Q: Production concerns for pgvector at scale (senior answer).
+
+**Answer:** **Index memory** — HNSW graphs live in RAM; size Azure memory-optimized SKUs (~`rows × dim × 4 bytes × overhead`). **Write amplification** — bulk-load then index, or partition + reindex. **Multi-tenancy** — filter by `tenant_id`; for hard isolation use partitioning/RLS; heavy filtering can hurt ANN recall (post-filtering drops candidates) so over-fetch (`LIMIT 50` → 5) or use per-tenant partitioned indexes. **Dimensionality** — index limit 2000 dims; truncate (Matryoshka) or use `halfvec` (fp16, ~50% space). **HA/DR** — Flexible Server zone-redundant HA + read replicas; embeddings replicate with the row (no separate vector-store DR plan). **Cost** — no extra service, but you pay in DB CPU/RAM and tuning.
 
 ---
 

@@ -602,3 +602,86 @@ ANNUALLY
 6. Pre-deployment checklist completion
 7. Post-deployment monitoring setup
 8. Periodic review schedule established
+
+---
+
+## Senior Deep Dive: AI in Risk Management & Responsible AI for Regulated/Global Organisations
+
+> *For roles deploying AI/ML in risk management at global, regulated enterprises (banking, insurance, financial services). Interviewers test whether you can ship models that survive model-risk audits, regulators, and second-line challenge — not just build accurate ones.*
+
+### SQ1: What is Model Risk Management (MRM) and how does SR 11-7 shape how you build ML/AI models?
+
+**Answer:** **Model Risk Management** is the discipline of identifying, measuring, and controlling the risk that a model is wrong or misused. The foundational text is the US Federal Reserve / OCC **SR 11-7** ("Guidance on Model Risk Management"); the UK equivalent is the PRA's **SS1/23**.
+
+Core tenets that change how you engineer:
+- **"Effective challenge"** — a credible, independent second line (Model Validation) must be able to challenge your model. So you build for *validatability*: documented assumptions, reproducible training, data lineage.
+- **Three lines of defence:** (1) model developers/owners, (2) independent validation + MRM, (3) internal audit.
+- **Full model lifecycle governance:** development → validation → approval → ongoing monitoring → periodic revalidation → retirement.
+- **Models are inventoried** with a risk tier (materiality × complexity). Higher tier = stricter validation and more frequent revalidation.
+- **Conceptual soundness + outcomes analysis + benchmarking** are all required — not just a good test-set metric.
+
+**LLM wrinkle the interviewer wants:** SR 11-7 predates GenAI. A non-deterministic, third-party, opaque LLM stresses every assumption (reproducibility, explainability, vendor dependency). Senior answer: treat the *LLM-powered system* (prompts + retrieval + guardrails + the model version) as the model under management, pin model/version, log all I/O, and add LLM-specific validation (hallucination rate, jailbreak resistance, prompt-injection tests).
+
+### SQ2: How do you make a credit/risk model explainable enough for regulators and adverse-action notices?
+
+**Answer:** Two layers:
+
+1. **Intrinsic interpretability where you can** — for credit decisioning, regulators (e.g. ECOA/Reg B in the US requiring *adverse action reason codes*) favor models you can explain per-decision. Logistic regression / scorecards (WoE binning) or monotonic-constrained GBMs (XGBoost `monotone_constraints`) are common because they're auditable and enforce sensible directionality (e.g., more missed payments never lowers risk).
+2. **Post-hoc explanations** when using complex models:
+   - **SHAP** (Shapley values) — locally accurate, consistent feature attributions; the de-facto standard for per-decision reason codes.
+   - **LIME** — local surrogate models; cheaper but less stable.
+   - **Counterfactuals** — "what minimal change flips the decision" maps naturally to adverse-action reasons and customer recourse.
+   - **PDP/ALE** for global behavior.
+
+**Senior nuance:** SHAP gives *attribution*, not a legally sufficient *reason* — you must map features to human-readable, non-discriminatory reason codes, and ensure top reasons are stable. Also watch proxy/correlated features (ZIP code proxying race). For LLMs, "explainability" becomes citation/grounding (which retrieved source justified the answer) + decision logs, not SHAP.
+
+### SQ3: How do you detect and mitigate bias/fairness issues in a risk model?
+
+**Answer:**
+
+**Measure** across protected groups (race, gender, age) using complementary metrics — they can conflict, so choose deliberately:
+
+| Metric | Definition | When it matters |
+|--------|-----------|-----------------|
+| Demographic parity | Equal approval rates across groups | Equal access goals |
+| Equal opportunity | Equal TPR across groups | Don't deny good applicants unequally |
+| Equalized odds | Equal TPR **and** FPR | Stronger fairness constraint |
+| Disparate impact ratio | (rate_group / rate_ref) | <0.8 ("four-fifths rule") flags adverse impact |
+| Calibration within groups | Predicted prob = observed across groups | Risk scores mean the same thing per group |
+
+**Impossibility result to cite:** you generally cannot satisfy calibration *and* equalized odds simultaneously when base rates differ — fairness is a business/legal trade-off, not a pure optimization.
+
+**Mitigate** at three stages: pre-processing (reweighing, resampling), in-processing (fairness constraints / adversarial debiasing), post-processing (group-specific thresholds — legally sensitive, get counsel). Tools: Fairlearn (tight with Azure ML), AIF360, What-If Tool.
+
+### SQ4: Which regulations and frameworks must a global AI risk system account for?
+
+**Answer:**
+- **EU AI Act** — risk-tiered (unacceptable / high / limited / minimal). Credit scoring and insurance pricing are **high-risk** → conformity assessment, risk management system, data governance, human oversight, logging, transparency. Phased enforcement through 2025–2027.
+- **GDPR Art. 22** — right not to be subject to solely automated decisions with legal/significant effect; requires meaningful human review and the ability to explain.
+- **SR 11-7 / PRA SS1/23** — model risk management (above).
+- **NIST AI Risk Management Framework (AI RMF)** — voluntary but the common control language: Govern / Map / Measure / Manage. **ISO/IEC 42001** — certifiable AI management system.
+- **Sector rules:** Basel (capital models), IFRS 9 / CECL (expected credit loss models), fair-lending (ECOA, FCRA).
+- **Data residency / sovereignty** — for global teams, where data and the model physically run (Azure region selection, EU data boundary).
+
+Senior framing: map each into your controls so you can answer an auditor with evidence (model inventory, validation reports, monitoring logs, human-oversight records), not intentions.
+
+### SQ5: How do you operationalize responsible AI on Azure specifically?
+
+**Answer:** Map principles to concrete Azure services so it's not just a slide:
+- **Azure ML Responsible AI dashboard** — error analysis, model interpretability (SHAP), fairness (Fairlearn), counterfactuals, causal analysis in one pane; emit a **Responsible AI scorecard** as audit evidence.
+- **Azure AI Content Safety** — pre/post filters for hate, sexual, violence, self-harm; **prompt shields** for jailbreak/prompt-injection; **groundedness detection** to catch ungrounded (hallucinated) RAG answers.
+- **Azure AI Foundry evaluations** — built-in groundedness, relevance, coherence, fluency, and risk/safety evaluators run in CI and on production samples.
+- **Model cards / data sheets** stored with the model in the Azure ML registry; **MLflow** for lineage and reproducibility.
+- **Microsoft Purview** — data classification, lineage, and DLP for the data feeding models.
+- **Human-in-the-loop** for high-risk decisions (Art. 22) + full request/response logging (Azure Monitor / Log Analytics) for the audit trail.
+
+### SQ6: A risk model that was accurate at launch is now under-performing. Walk through your response.
+
+**Answer:** Structure it as an incident under MRM:
+1. **Detect** — monitoring already tracks data drift (PSI/KS on inputs), concept drift (performance vs delayed ground truth), and stability of score distributions. PSI > 0.25 on key features or AUC decay beyond threshold triggers alert.
+2. **Contain** — for material risk, fall back to a champion/simpler model or human review; never silently keep serving a failing risk model.
+3. **Diagnose** — drift (population shift, e.g. macro/rate-environment change) vs data quality break vs feedback-loop effects vs upstream pipeline change. Slice by segment to localize.
+4. **Remediate** — recalibrate, retrain on recent data, or redesign; revalidate through second line before redeploy.
+5. **Govern** — log the incident, update the model inventory, run a post-mortem, and feed lessons into the revalidation schedule. Notify regulators if thresholds require.
+
+This demonstrates the lifecycle thinking (detection → controlled fallback → validation gate → governance) that separates a senior from an IC answer.

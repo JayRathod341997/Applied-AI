@@ -356,4 +356,55 @@ After pushing the image, the pipeline should update the container orchestrator (
 
 ---
 
+## Bonus: Senior / JD-Aligned Questions (Deploying GenAI on Azure)
+
+> Self-contained — answer follows each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. What is the relationship between Azure AI Foundry, Azure OpenAI Service, and Azure Machine Learning?
+
+A) They are three names for the same product  
+B) Foundry = GenAI app lifecycle platform; Azure OpenAI = hosted frontier models in your tenant; Azure ML = general MLOps for any/custom model  
+C) Azure ML is only for image generation  
+D) Azure OpenAI replaces Azure ML entirely  
+
+**Answer: B** — they compose: Foundry orchestrates the GenAI app lifecycle, Azure OpenAI serves the managed OpenAI models, and Azure ML provides broader MLOps including classic/custom models.
+
+### BQ2. Your LLM workload has predictable, sustained high volume with a strict latency SLA. Which Azure OpenAI capacity model fits best?
+
+A) Pay-as-you-go (PAYG) only  
+B) Provisioned Throughput Units (PTU) for reserved, stable-latency capacity  
+C) The free tier  
+D) Self-hosting on a single CPU VM  
+
+**Answer: B** — PTU reserves guaranteed throughput with stable latency and avoids 429 throttling; PAYG is better below the break-even volume or for bursty spillover.
+
+### BQ3. What is the standard pattern to scale beyond per-region Azure OpenAI quota and survive a regional outage?
+
+A) Retry forever with no backoff  
+B) Put APIM / a gateway in front of multiple Azure OpenAI deployments across regions and load-balance + failover  
+C) Increase `max_tokens` on every call  
+D) Disable content filtering  
+
+**Answer: B** — the "smart load balancer" pattern spreads load across regional quota pools and provides failover; combine with backoff that honors `Retry-After`.
+
+### BQ4. Which is the most secure way for an app to authenticate to Azure OpenAI in an enterprise tenant?
+
+A) Hard-code the API key in the container image  
+B) Microsoft Entra ID with Managed Identity (no keys in code) + least-privilege RBAC  
+C) Share one key across all teams via email  
+D) Put the key in a public environment variable  
+
+**Answer: B** — Managed Identity removes long-lived secrets from code; pair with Private Endpoints, Key Vault, and region/data-boundary controls.
+
+### BQ5. In an Azure LLMOps pipeline, what should gate promotion of a new prompt/model to production?
+
+A) Whoever approves first by Slack message  
+B) An automated evaluation step (groundedness/relevance/safety) that blocks on regression, followed by canary/blue-green rollout with rollback  
+C) Only unit tests on the API wrapper  
+D) Manual eyeballing of three examples  
+
+**Answer: B** — the senior signal is an eval-gated, reversible deployment; Foundry evaluations in CI plus canary/blue-green and automated rollback.
+
+---
+
 *End of Module 12 Quiz*

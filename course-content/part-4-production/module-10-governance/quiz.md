@@ -317,3 +317,63 @@ D) Anonymization only works for text data
 | **10–13** | Intermediate | Good foundation. Revisit sections 10.1–10.3 and focus on regulatory frameworks. |
 | **6–9** | Developing | Needs reinforcement. Study all concept sections thoroughly and review code examples. |
 | **0–5** | Beginner | Start with Section 10.1 and work through each section systematically. Focus on the risk taxonomy first. |
+
+---
+
+## Bonus: Senior / JD-Aligned Questions (AI Risk Management & Responsible AI)
+
+> Self-contained — answer follows each question. See the [interview-questions.md](interview-questions.md) *Senior Deep Dive* for full explanations.
+
+### BQ1. Which supervisory guidance is the foundation of Model Risk Management for banks, requiring independent "effective challenge"?
+
+A) GDPR Article 22  
+B) SR 11-7 (Fed/OCC); UK equivalent PRA SS1/23  
+C) ISO 9001  
+D) PCI-DSS  
+
+**Answer: B** — SR 11-7 defines model risk governance, the three lines of defence, and independent validation. GDPR Art. 22 is about automated decisions, not model risk per se.
+
+### BQ2. A regulator requires per-decision reason codes for a credit model. Which technique most directly supports this?
+
+A) Increasing model temperature  
+B) SHAP feature attributions mapped to human-readable, non-discriminatory reason codes  
+C) Dropout at inference  
+D) Larger embedding dimensions  
+
+**Answer: B** — SHAP gives locally accurate attributions; you must still map them to stable, lawful reason codes. Monotonic-constrained GBMs or scorecards also help.
+
+### BQ3. Why can't you generally satisfy both within-group calibration and equalized odds at the same time?
+
+A) It's a software bug in Fairlearn  
+B) Because of an impossibility result when base rates differ across groups — fairness becomes a business/legal trade-off  
+C) Calibration is illegal under the EU AI Act  
+D) Equalized odds only applies to images  
+
+**Answer: B** — when base rates differ, these fairness criteria are mathematically incompatible; you choose the operating point deliberately.
+
+### BQ4. Under the EU AI Act, credit scoring and insurance pricing are classified as:
+
+A) Minimal risk — no obligations  
+B) Prohibited  
+C) High-risk — requiring conformity assessment, risk management, human oversight, logging, and transparency  
+D) Out of scope  
+
+**Answer: C** — high-risk systems carry the heaviest obligations short of prohibition.
+
+### BQ5. Which Azure capability detects when a RAG answer is *not grounded* in the retrieved sources?
+
+A) Azure Key Vault  
+B) Azure AI Content Safety groundedness detection (and Foundry groundedness evaluators)  
+C) Azure Blob Storage  
+D) Azure DevOps Pipelines  
+
+**Answer: B** — groundedness detection flags ungrounded (hallucinated) claims; pair it with content-safety filters and prompt shields.
+
+### BQ6. A previously accurate risk model now shows PSI > 0.25 on key features in production. The first MRM-appropriate action is to:
+
+A) Ignore it until the next annual review  
+B) Trigger the drift alert, contain via fallback/human review for material decisions, then diagnose and revalidate before redeploying  
+C) Immediately delete the model  
+D) Increase the learning rate  
+
+**Answer: B** — never silently keep serving a drifting risk model; contain, diagnose (drift vs data break vs feedback loop), remediate, and revalidate through the second line.

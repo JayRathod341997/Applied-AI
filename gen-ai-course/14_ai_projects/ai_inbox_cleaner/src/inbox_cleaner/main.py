@@ -49,10 +49,12 @@ pipeline = EmailPipeline()
 
 @app.get("/health")
 async def health():
+    import os
+    credentials_exist = os.path.exists(settings.google_client_secrets_json)
     return {
         "status": "ok",
         "service": "ai-inbox-cleaner",
-        "gmail_configured": bool(settings.google_service_account_json),
+        "gmail_configured": credentials_exist,
     }
 
 
