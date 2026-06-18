@@ -9,7 +9,7 @@ Systematic debugging is essential for maintaining production RAG systems. This g
 ## 1. The DEBUG Framework
 
 A structured approach to debugging RAG systems:
-
+```
 
                          ┌─────────────────────────┐
                          │     DEBUG Framework     │
@@ -30,7 +30,7 @@ A structured approach to debugging RAG systems:
 │  Baseline     │ │  Outputs  │             │  Tools   │
 └───────────────┘ └───────────┘             └──────────┘
 
-
+```
 ### D - Define the Problem
 - Collect specific symptoms
 - Define what "correct" looks like
@@ -209,7 +209,7 @@ def debug_llm_response(prompt: str, response: str, contexts: List[str]):
 ## 3. Systematic Troubleshooting
 
 ### 3.1 Latency Debugging
-
+```
 
 ┌────────────────┐   ┌──────────────────┐   ┌──────────────────────┐
 │ Query Received │──►│ Query Processing │──►│   Time < 100ms?      │
@@ -255,7 +255,7 @@ def debug_llm_response(prompt: str, response: str, contexts: List[str]):
                           │    Response      │
                           └──────────────────┘
 
-
+```
 **Debug Script:**
 ```python
 import time

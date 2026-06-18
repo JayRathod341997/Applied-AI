@@ -45,7 +45,7 @@ results = evaluate(
 - Insufficient resource allocation
 - Growing dataset without capacity planning
 
-
+```
                     ┌─────────────────────┐
                     │        Query        │
                     └──────────┬──────────┘
@@ -66,7 +66,7 @@ results = evaluate(
             │Check Index││ Check  ││  Check  │ │Alert On-  │ │Fallback to Cache │
             │           ││Memory  ││ Network │ │Call       │ │                  │
             └───────────┘└────────┘└─────────┘ └───────────┘ └──────────────────┘
-
+```
 
 ### 1.3 Embedding Model Drift
 
@@ -209,7 +209,7 @@ result = evaluate(
 - User complaints about slow responses
 - Timeout errors in logs
 
-
+```
    User          API          VectorDB         LLM
     │             │               │              │
     │──── Query ──►│               │              │
@@ -224,7 +224,7 @@ result = evaluate(
     │◄─ Response ─│                              │
     │  (Waiting)  │                              │
     │             │                              │
-
+```
 
 **Root Causes:**
 - Vector database overloaded

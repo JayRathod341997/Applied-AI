@@ -433,7 +433,7 @@ class RAGFallback:
 
 ### 5.2 Production Best Practices
 
-
+```
                     ┌────────────────────────────┐
                     │     Production Checklist   │
                     └───────────────┬────────────┘
@@ -451,7 +451,7 @@ class RAGFallback:
 │              │ │             │     │  data        │ │                 │
 └──────────────┘ └─────────────┘     └──────────────┘ └─────────────────┘
 
-
+```
 ### 5.3 Operational Best Practices
 
 - [ ] Regular index maintenance

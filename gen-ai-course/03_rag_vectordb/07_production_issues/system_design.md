@@ -10,7 +10,7 @@ Building a production-grade RAG system requires careful architectural decisions.
 
 ### 1.1 Core Components
 
-
+```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                              Client Layer                                │
 │                                                                          │
@@ -58,10 +58,10 @@ Building a production-grade RAG system requires careful architectural decisions.
                        │  │  Metrics   │ │ Logging │ │  Tracing  │  │
                        │  └────────────┘ └─────────┘ └───────────┘  │
                        └──────────────────────────────────────────────┘
-
+```
 
 ### 1.2 Data Flow
-
+```
 
   Client       API        Cache     Retriever   VectorDB   Reranker     LLM
     │            │            │           │           │          │         │
@@ -88,7 +88,7 @@ Building a production-grade RAG system requires careful architectural decisions.
     │   └────────────────────────────────────────────────────────────┘    │
     │            │            │           │           │          │         │
 
-
+```
 ---
 
 ## 2. Component Design
@@ -275,7 +275,7 @@ class RAGWorker:
 ```
 
 ### 3.2 Caching Architecture
-
+```
 
              ┌────────────────────────────────────┐
              │          Client Request            │
@@ -315,7 +315,7 @@ class RAGWorker:
 └───────────│──────────────────────────────────────────────────────┘
             │
             ▼ Populate All Cache Levels ──► Client
-
+```
 
 ### 3.3 Async Processing
 
@@ -400,7 +400,7 @@ class RAGCircuitBreaker:
 ```
 
 ### 4.2 Graceful Degradation
-
+```
 
                ┌─────────────────────┐
                │    Query Received   │
@@ -435,7 +435,7 @@ class RAGCircuitBreaker:
        │
        └──────────────────────────────►┘
 
-
+```
 ---
 
 ## 5. Observability Architecture
@@ -563,7 +563,7 @@ class RAGSecurity:
 
 ### 6.2 Data Privacy
 
-
+```
 ┌──────────────────────────┐    ┌─────────────────────────┐    ┌──────────────────────────┐
 │     Input Processing     │    │      RAG Processing      │    │     Output Processing    │
 │                          │    │                          │    │                          │
@@ -576,7 +576,7 @@ class RAGSecurity:
 │  └────────────────────┘  │    │  └───────────────────┘  │    │  └────────────────────┘  │
 └──────────────────────────┘    └─────────────────────────┘    └──────────────────────────┘
 
-
+```
 ---
 
 ## 7. Deployment Architecture
@@ -638,7 +638,7 @@ spec:
 
 ### 7.2 Service Mesh
 
-
+```
   ┌─────────────────────────────────────────────────────────────────────┐
   │                        Kubernetes Cluster                           │
   │                                                                     │
@@ -660,7 +660,7 @@ spec:
   ┌──────────┴─────────┐
   │  External Traffic  │
   └────────────────────┘
-
+```
 
 ---
 
