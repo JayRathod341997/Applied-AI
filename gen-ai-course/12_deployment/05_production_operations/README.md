@@ -160,7 +160,7 @@ Shipping a new model or app version safely means controlling how much traffic it
 flowchart TB
     subgraph BG["Blue-Green"]
         direction LR
-        BGr[100% → Blue v1] -. instant switch .-> BGg[100% → Green v2]
+        BGr["100% → Blue v1"] -. instant switch .-> BGg["100% → Green v2"]
     end
     subgraph Can["Canary"]
         direction LR
@@ -186,7 +186,7 @@ Releases should be automated and gated — each stage must pass before the next 
 flowchart LR
     Cm[Commit / PR] --> B[Build image]
     B --> U[Unit + lint]
-    U --> E[Eval gate<br/>quality metric ≥ threshold]
+    U --> E["Eval gate<br/>quality metric ≥ threshold"]
     E -->|pass| St[Deploy to staging]
     E -->|fail| Stop1[Block release]
     St --> Sm[Smoke tests + canary]
@@ -204,7 +204,7 @@ When a release misbehaves, the decision to roll back should be mechanical, not a
 flowchart TD
     Start[New version live] --> Q1{Error rate or latency<br/>breached SLO?}
     Q1 -->|no| Watch[Continue monitoring / proceed]
-    Q1 -->|yes| Q2{Within rollback window<br/>& previous version healthy?}
+    Q1 -->|yes| Q2{"Within rollback window<br/>& previous version healthy?"}
     Q2 -->|yes| RB[Roll back to previous version]
     Q2 -->|no| FF[Fix-forward: patch + redeploy]
     RB --> Verify[Verify metrics recover]
@@ -262,7 +262,7 @@ For LLM services, cost ≈ tokens. Attributing spend back to teams or customers 
 ```mermaid
 flowchart LR
     Req[Request tagged with<br/>customer / feature / model] --> Meter[Token meter<br/>prompt + completion tokens]
-    Meter --> Price[× model price per 1K tokens]
+    Meter --> Price["× model price per 1K tokens"]
     Price --> Agg[Aggregate by tag]
     Agg --> Report[Cost dashboard<br/>per customer / feature]
     Agg --> Budget{Over budget?}
