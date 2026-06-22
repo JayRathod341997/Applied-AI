@@ -214,3 +214,76 @@ flowchart TD
 > **In practice:** Use canary for model changes where quality regressions are subtle (you need real traffic to detect them) and blue-green for infrastructure changes you can validate before the switch. Always wire an automatic rollback trigger on error-rate/latency SLO breach — humans are too slow at 3 a.m. The eval gate is what makes a GenAI pipeline different from a normal one: a green unit-test run does not mean the model still answers well.
 
 **Maps to:** blue-green/canary/rolling configs in [02_deployment_techniques](../02_deployment_techniques/README.md#deployment-strategies-blue-green-canary-rolling); Azure ML traffic-split deployments in [03_azure](../03_deployment_implementation_with_azure/README.md#azure-machine-learning-endpoints); SageMaker production variants in [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#sagemaker-real-time-endpoints).
+
+---
+
+## Observability & Cost
+
+You cannot operate what you cannot see. Observability for a GenAI service combines the three classic signals — metrics, logs, traces — with two GenAI-specific ones: **token usage** and **answer quality**.
+
+*Figure: how signals flow from the service to dashboards and alerts.*
+
+```mermaid
+flowchart LR
+    subgraph App["Inference service"]
+        Met[Metrics: latency, QPS, GPU util, token counts]
+        Log[Structured logs]
+        Tr[Traces: gateway → model → tools]
+    end
+    Met --> TSDB[(Metrics store<br/>Prometheus / Azure Monitor / CloudWatch)]
+    Log --> LStore[(Log store)]
+    Tr --> TStore[(Trace store)]
+    TSDB --> Dash[Dashboards: Grafana / App Insights]
+    TSDB --> Alert{Alert rules}
+    Alert -->|SLO breach| Page[Page on-call / trigger rollback]
+```
+
+A useful LLM dashboard groups panels by question, not by raw metric:
+
+```
+┌───────────────────────────┬───────────────────────────┐
+│ Latency                   │ Reliability               │
+│  • p50 / p95 TTFT         │  • error rate (4xx/5xx)   │
+│  • inter-token latency    │  • timeouts / retries     │
+├───────────────────────────┼───────────────────────────┤
+│ Throughput & Capacity     │ Cost                      │
+│  • requests/sec           │  • tokens/min (in/out)    │
+│  • GPU utilization        │  • $ spend/hour           │
+│  • queue depth            │  • $ per request          │
+└───────────────────────────┴───────────────────────────┘
+```
+
+### Token spend & cost attribution
+
+For LLM services, cost ≈ tokens. Attributing spend back to teams or customers requires tagging every request and aggregating by token counts × price.
+
+*Figure: from a single request to a per-customer cost report.*
+
+```mermaid
+flowchart LR
+    Req[Request tagged with<br/>customer / feature / model] --> Meter[Token meter<br/>prompt + completion tokens]
+    Meter --> Price[× model price per 1K tokens]
+    Price --> Agg[Aggregate by tag]
+    Agg --> Report[Cost dashboard<br/>per customer / feature]
+    Agg --> Budget{Over budget?}
+    Budget -->|yes| Throttle[Alert / throttle / downgrade model]
+```
+
+> **In practice:** Track p95, not averages — tail latency is what users feel. Always log `prompt_tokens` and `completion_tokens`; they are both your bill and your capacity signal. Tag requests at the gateway so cost attribution is automatic rather than a quarterly forensics exercise. Cache hits, shorter prompts, and routing easy requests to cheaper models are the three biggest cost levers.
+
+**Maps to:** Prometheus/Grafana and middleware metrics in [02_deployment_techniques](../02_deployment_techniques/README.md#monitoring--observability); App Insights in [03_azure](../03_deployment_implementation_with_azure/README.md#monitoring-with-azure-monitor--application-insights); CloudWatch in [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#monitoring-with-cloudwatch--sagemaker-clarify).
+
+---
+
+## Key Takeaways
+
+- A request flows gateway → auth/rate-limit → queue → batching scheduler → GPU → streamed tokens; the queue and KV-cache explain most latency and capacity behaviour.
+- Continuous batching maximizes throughput, not single-request speed.
+- Scale pods (HPA/KEDA) and nodes (Karpenter/Cluster Autoscaler) on signals that lead demand; scale-to-zero trades cost for cold-start latency.
+- Choose canary for subtle model-quality risk, blue-green for validated infra cutovers; always wire automatic rollback on SLO breach.
+- Observe metrics + logs + traces **plus** tokens and quality; tag requests for automatic cost attribution.
+
+---
+
+*Previous: [12.2 Deployment Techniques →](../02_deployment_techniques/README.md)*
+*Next: [12.3 Azure Implementation →](../03_deployment_implementation_with_azure/README.md)*
