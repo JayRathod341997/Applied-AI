@@ -76,3 +76,74 @@ GPU Memory (e.g. 80 GB A100)
 > **In practice:** Latency has two parts — time-to-first-token (queue wait + prompt processing) and inter-token latency (decode speed). Continuous batching improves throughput; it does not shorten a single request. When the KV-cache fills, new requests queue — that is the real meaning of "GPU at capacity."
 
 **Maps to:** vLLM/continuous batching config in [02_deployment_techniques](../02_deployment_techniques/README.md#model-optimization-before-deployment); GPU node pools in [03_azure](../03_deployment_implementation_with_azure/README.md#azure-kubernetes-service-aks) and [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#sagemaker-real-time-endpoints).
+
+---
+
+## Scaling & Reliability
+
+Traffic to a GenAI service is bursty. Scaling well means matching capacity to demand at two levels: scaling **pods** (replicas of your server) and scaling **nodes** (the actual GPU machines). Different signals drive each.
+
+*Figure: the three layers of autoscaling and what triggers each.*
+
+```mermaid
+flowchart TD
+    M[Metrics source] --> HPA
+    M --> KEDA
+    subgraph Pod["Pod-level scaling"]
+        HPA[HPA<br/>CPU / GPU utilization or custom metric] -->|add/remove replicas| RS[ReplicaSet]
+        KEDA[KEDA<br/>queue depth, requests/sec, event source] -->|scale 1..N or to zero| RS
+    end
+    RS -->|needs a node with a free GPU?| Node
+    subgraph NodeScale["Node-level scaling"]
+        Node[Karpenter / Cluster Autoscaler] -->|provision GPU node| GPUNode[New GPU node]
+    end
+    GPUNode -->|node Ready| RS
+```
+
+- **HPA** reacts to resource/custom metrics already exposed on running pods.
+- **KEDA** reacts to *external* signals (queue length, requests/sec) and uniquely can scale **to zero**.
+- **Karpenter / Cluster Autoscaler** adds machines when pods cannot be scheduled for lack of GPUs.
+
+### Scale-to-zero and cold starts
+
+Scaling to zero saves money on idle services but introduces a **cold start**: the next request must wait for a node, image pull, and model load.
+
+*Figure: the cost of the first request after scaling from zero.*
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant K as KEDA / Platform
+    participant N as Node Pool
+    participant P as Pod
+    U->>K: first request after idle
+    K->>N: scale 0 -> 1
+    N->>N: provision node (~30-90s)
+    N->>P: pull image + load model (~20-60s)
+    P-->>U: ready — response served
+    Note over U,P: Subsequent requests are warm (<1s overhead)
+```
+
+### Multi-region failover & high availability
+
+For resilience, run in more than one region behind a global router that health-checks each backend and fails over automatically.
+
+*Figure: active-active topology with health-checked failover.*
+
+```mermaid
+flowchart LR
+    U[Users] --> GR[Global router / Traffic Manager]
+    GR -->|healthy| R1
+    GR -->|healthy| R2
+    subgraph R1["Region A"]
+        LB1[Load balancer] --> P1[Inference pods]
+    end
+    subgraph R2["Region B"]
+        LB2[Load balancer] --> P2[Inference pods]
+    end
+    GR -.->|health probe fails| X[Drain region, route 100% to healthy region]
+```
+
+> **In practice:** Pick scaling signals that lead demand, not lag it — queue depth (KEDA) reacts before CPU saturation does. Keep a warm minimum replica for latency-sensitive services; use scale-to-zero only where cold-start latency is acceptable. Rate limiting at the gateway is part of reliability: it protects the GPU fleet from being overwhelmed.
+
+**Maps to:** KEDA `ScaledObject` and GPU node pools in [03_azure](../03_deployment_implementation_with_azure/README.md#azure-kubernetes-service-aks); Karpenter and SageMaker auto-scaling in [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#ecs--eks-container-deployment); serverless cold starts in [02_deployment_techniques](../02_deployment_techniques/README.md#serverless-techniques).
