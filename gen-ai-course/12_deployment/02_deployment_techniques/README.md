@@ -571,6 +571,19 @@ llm = LLM(
 
 ## Deployment Strategies
 
+*Figure: canary release — traffic shifts to v2 in monitored increments.*
+
+```mermaid
+flowchart LR
+    LB[Load balancer] -->|95%| V1[Model v1 stable]
+    LB -->|5%| V2[Model v2 canary]
+    V2 --> Mon{Metrics healthy?}
+    Mon -->|yes| Step["Increase v2 share → 25% → 50% → 100%"]
+    Mon -->|no| Abort[Route 100% back to v1]
+```
+
+> For the conceptual comparison of blue-green vs canary vs rolling, see [12.5 Release & Rollback](../05_production_operations/README.md#release--rollback).
+
 ### Blue-Green Deployment
 
 Maintain two identical production environments. Switch traffic instantly between them.

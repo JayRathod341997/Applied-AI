@@ -550,6 +550,19 @@ resource app 'Microsoft.App/containerApps@2023-05-01' = {
 
 For production workloads requiring full control, GPU node pools, and enterprise networking.
 
+*Figure: KEDA scales the deployment on queue depth, then the cluster autoscaler adds GPU nodes if needed.*
+
+```mermaid
+flowchart LR
+    Src[Event source<br/>queue length / requests-per-sec] --> KEDA[KEDA ScaledObject]
+    KEDA -->|scale 0..N replicas| Dep[vLLM Deployment]
+    Dep -->|pods unschedulable?| CA[Cluster Autoscaler]
+    CA -->|add GPU node| Pool[GPU node pool]
+    Pool --> Dep
+```
+
+> For how pod-level and node-level scaling fit together, see [12.5 Scaling & Reliability](../05_production_operations/README.md#scaling--reliability).
+
 ### AKS cluster setup with GPU node pool
 
 ```bash

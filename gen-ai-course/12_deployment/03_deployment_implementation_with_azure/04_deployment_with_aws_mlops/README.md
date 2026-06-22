@@ -220,6 +220,20 @@ def rag_retrieve_and_generate(query: str, kb_id: str, model_arn: str) -> dict:
 
 Deploy your own fine-tuned models with SageMaker's managed inference infrastructure.
 
+*Figure: a SageMaker real-time endpoint with target-tracking auto-scaling across variants.*
+
+```mermaid
+flowchart LR
+    Cl[Client] --> EP[SageMaker Endpoint]
+    EP -->|traffic split| VA[Variant A v1]
+    EP -->|traffic split| VB[Variant B v2]
+    CW[CloudWatch metric<br/>InvocationsPerInstance] --> AS[Application Auto Scaling]
+    AS -->|adjust instance count| VA
+    AS -->|adjust instance count| VB
+```
+
+> For the conceptual model of scaling signals and cold starts, see [12.5 Scaling & Reliability](../05_production_operations/README.md#scaling--reliability).
+
 ### Endpoint types
 
 ```
