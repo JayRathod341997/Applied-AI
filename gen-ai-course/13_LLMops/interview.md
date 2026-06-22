@@ -288,7 +288,7 @@ Re-ran the A/B test: user satisfaction delta dropped to 1.2%, which was within o
 
 ---
 
-> **Staff/Principal stretch:** Define the LLMOps platform roadmap and the build-vs-buy decisions (gateway, eval, observability) for a company scaling from 5 to 100 LLM features.
+> 🎯 **Staff/Principal stretch:** Define the LLMOps platform roadmap and the build-vs-buy decisions (gateway, eval, observability) for a company scaling from 5 to 100 LLM features.
 
 **Answer:** The core principle at this scale is that platform investment must stay ahead of adoption. The worst outcome is 100 features each building their own gateway, observability, and eval — you get 100 snowflakes, no visibility, and no ability to enforce policy.
 

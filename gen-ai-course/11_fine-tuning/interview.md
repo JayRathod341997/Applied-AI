@@ -619,7 +619,7 @@ Can you maintain a labeled dataset over time as the domain drifts?
 
 ---
 
-> **Staff/Principal stretch:** Define the org's decision framework and guardrails for when engineering teams may fine-tune independently versus when they must use managed/approved models.
+> 🎯 **Staff/Principal stretch:** Define the org's decision framework and guardrails for when engineering teams may fine-tune independently versus when they must use managed/approved models.
 
 **Model answer:**
 

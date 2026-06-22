@@ -279,7 +279,7 @@ prepare_data → fine_tune → evaluate ─(fail)─► STOP (nothing registers)
 
 ---
 
-> **Staff/Principal stretch:** You're asked to set a 2-year MLOps strategy as the org scales from 3 to 30 models. What do you centralize first and why?
+> 🎯 **Staff/Principal stretch:** You're asked to set a 2-year MLOps strategy as the org scales from 3 to 30 models. What do you centralize first and why?
 
 **Answer:** Centralize in the order of blast-radius and irreversibility: the registry first, the eval harness second, the observability stack third.
 

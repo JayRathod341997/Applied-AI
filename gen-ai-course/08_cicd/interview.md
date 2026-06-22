@@ -325,7 +325,7 @@ I documented the runbook, ran a game day (intentional bad deploy in staging), an
 
 ---
 
-> **Staff/Principal stretch:** Define the org's release-safety standard for GenAI (required gates, rollback SLAs, who can override).
+> 🎯 **Staff/Principal stretch:** Define the org's release-safety standard for GenAI (required gates, rollback SLAs, who can override).
 
 **Answer:** A release-safety standard for GenAI is a written policy that makes the implicit explicit: which gates are mandatory for every service, what the rollback SLA is, and under what conditions a gate can be bypassed.
 

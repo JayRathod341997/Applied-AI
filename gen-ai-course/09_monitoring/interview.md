@@ -402,7 +402,7 @@ The harder problem was the observability gap. Over the next sprint, I shipped: (
 
 ---
 
-> **Staff/Principal stretch:** Define the org-wide observability standard — required spans, metrics, and quality evaluations that every GenAI service must emit.
+> 🎯 **Staff/Principal stretch:** Define the org-wide observability standard — required spans, metrics, and quality evaluations that every GenAI service must emit.
 
 **Answer:** At staff/principal level, the goal is a contract — a spec that any team building a GenAI service can implement independently, producing signals that roll up into a single org-wide quality and cost view.
 

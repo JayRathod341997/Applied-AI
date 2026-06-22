@@ -1106,7 +1106,7 @@ Azure DevOps pipeline stage: "Contract Verification" gate before any MCP server 
 
 ---
 
-> **Staff/Principal stretch:** Define the enterprise MCP governance model — covering registry, security review, and tool ownership — that scales from 10 tools to 1,000 tools without becoming a bottleneck.
+> 🎯 **Staff/Principal stretch:** Define the enterprise MCP governance model — covering registry, security review, and tool ownership — that scales from 10 tools to 1,000 tools without becoming a bottleneck.
 >
 > **Model answer:** The governance model must be a platform, not a process. At 10 tools, a human approval checklist is fine. At 1,000 tools, the same checklist is a queue that kills developer velocity and gets bypassed.
 >
