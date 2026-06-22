@@ -147,3 +147,70 @@ flowchart LR
 > **In practice:** Pick scaling signals that lead demand, not lag it — queue depth (KEDA) reacts before CPU saturation does. Keep a warm minimum replica for latency-sensitive services; use scale-to-zero only where cold-start latency is acceptable. Rate limiting at the gateway is part of reliability: it protects the GPU fleet from being overwhelmed.
 
 **Maps to:** KEDA `ScaledObject` and GPU node pools in [03_azure](../03_deployment_implementation_with_azure/README.md#azure-kubernetes-service-aks); Karpenter and SageMaker auto-scaling in [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#ecs--eks-container-deployment); serverless cold starts in [02_deployment_techniques](../02_deployment_techniques/README.md#serverless-techniques).
+
+---
+
+## Release & Rollback
+
+Shipping a new model or app version safely means controlling how much traffic it sees and being able to undo instantly. The three core strategies trade speed of rollout against blast radius.
+
+*Figure: how traffic shifts under blue-green, canary, and rolling releases.*
+
+```mermaid
+flowchart TB
+    subgraph BG["Blue-Green"]
+        direction LR
+        BGr[100% → Blue v1] -. instant switch .-> BGg[100% → Green v2]
+    end
+    subgraph Can["Canary"]
+        direction LR
+        Ca1[95% v1 / 5% v2] --> Ca2[75% v1 / 25% v2] --> Ca3[0% v1 / 100% v2]
+    end
+    subgraph Roll["Rolling"]
+        direction LR
+        Ro1[Replace pod 1] --> Ro2[Replace pod 2] --> Ro3[... until all v2]
+    end
+```
+
+- **Blue-green:** two full environments, switch all traffic at once. Instant rollback (switch back), but double the resources during the cutover.
+- **Canary:** shift traffic in small increments, watching metrics at each step. Smallest blast radius; slowest rollout.
+- **Rolling:** replace replicas one batch at a time. No extra environment, but old and new run simultaneously mid-rollout.
+
+### CI/CD pipeline with quality gates
+
+Releases should be automated and gated — each stage must pass before the next runs.
+
+*Figure: pipeline from commit to production with automated gates.*
+
+```mermaid
+flowchart LR
+    Cm[Commit / PR] --> B[Build image]
+    B --> U[Unit + lint]
+    U --> E[Eval gate<br/>quality metric ≥ threshold]
+    E -->|pass| St[Deploy to staging]
+    E -->|fail| Stop1[Block release]
+    St --> Sm[Smoke tests + canary]
+    Sm -->|healthy| Prod[Promote to production]
+    Sm -->|errors/latency spike| RB[Auto-rollback]
+```
+
+### Rollback decision flow
+
+When a release misbehaves, the decision to roll back should be mechanical, not a debate.
+
+*Figure: deciding whether to roll back.*
+
+```mermaid
+flowchart TD
+    Start[New version live] --> Q1{Error rate or latency<br/>breached SLO?}
+    Q1 -->|no| Watch[Continue monitoring / proceed]
+    Q1 -->|yes| Q2{Within rollback window<br/>& previous version healthy?}
+    Q2 -->|yes| RB[Roll back to previous version]
+    Q2 -->|no| FF[Fix-forward: patch + redeploy]
+    RB --> Verify[Verify metrics recover]
+    FF --> Verify
+```
+
+> **In practice:** Use canary for model changes where quality regressions are subtle (you need real traffic to detect them) and blue-green for infrastructure changes you can validate before the switch. Always wire an automatic rollback trigger on error-rate/latency SLO breach — humans are too slow at 3 a.m. The eval gate is what makes a GenAI pipeline different from a normal one: a green unit-test run does not mean the model still answers well.
+
+**Maps to:** blue-green/canary/rolling configs in [02_deployment_techniques](../02_deployment_techniques/README.md#deployment-strategies-blue-green-canary-rolling); Azure ML traffic-split deployments in [03_azure](../03_deployment_implementation_with_azure/README.md#azure-machine-learning-endpoints); SageMaker production variants in [04_aws_mlops](../03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md#sagemaker-real-time-endpoints).
