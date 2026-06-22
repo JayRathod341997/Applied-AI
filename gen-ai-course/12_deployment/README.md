@@ -37,6 +37,10 @@ By the end of this module you will be able to:
 │   └── 04_deployment_with_aws_mlops/          ← AWS deep-dive
 │       └── README.md                Bedrock, SageMaker endpoints, Lambda, MLOps pipelines
 │
+├── 05_production_operations/        ← Conceptual glue (diagram-driven)
+│   └── README.md                    Request lifecycle, scaling, releases,
+│                                    observability & cost — visualized
+│
 └── interview.md                     ← Interview prep Q&A
 ```
 
@@ -55,6 +59,12 @@ By the end of this module you will be able to:
 │  Step 2 — 02_deployment_techniques                              │
 │  "How do I actually build this?"                                │
 │  Follow the Docker → K8s → CI/CD → monitoring progression      │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│  Step 2.5 — 05_production_operations                            │
+│  "How does this behave under real traffic?"                     │
+│  Visual mental models: request flow, scaling, releases, cost    │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
               ┌────────────────┴────────────────┐
@@ -109,10 +119,11 @@ Cloud accounts (at least one):
 |---|---|
 | 01 Deployment Overview | 1–2 hours |
 | 02 Deployment Techniques | 3–4 hours |
+| 02.5 Production Operations | 1.5–2 hours |
 | 03 Azure Implementation | 2–3 hours |
 | 04 AWS & MLOps | 2–3 hours |
 | Interview Prep | 1 hour |
-| **Total** | **~10 hours** |
+| **Total** | **~12 hours** |
 
 ---
 
