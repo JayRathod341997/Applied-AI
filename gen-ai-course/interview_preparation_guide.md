@@ -717,3 +717,24 @@ redis.setex(f"processed:{key}", expiry, "done", nx=True)
 | On-demand | $0.00001667 | 100ms | Good |
 | Provisioned | $0.00000972 | 50ms | Excellent |
 | Reserved | $0.0000004167 | 50ms | Requires planning |
+
+---
+
+## Senior Deep Dives by Module
+
+Each course module's `interview.md` ends with a **Senior Deep Dive** structured into four blocks — *System Design & Scale*, *Trade-offs & Decisions*, *Failure Modes & Incidents*, *Leadership & Behavioral* — plus a Staff/Principal stretch question. Use these for senior/staff-level interview prep on each topic:
+
+- [01 — Generative AI](01_generative_ai/interview.md#senior-deep-dive-genai-fundamentals)
+- [02 — LangChain](02_langchain/interview.md#senior-deep-dive-langchain-in-production)
+- [03 — RAG & Vector Databases](03_rag_vectordb/interview.md#senior-deep-dive-rag--vector-databases)
+- [04 — Agentic Systems](04_agentic_systems/interview.md#senior-deep-dive-agentic-systems-at-scale)
+- [05 — MCP](05_mcp/interview.md#senior-deep-dive-mcp-in-the-enterprise)
+- [06 — LangGraph](06_langgraph/interview.md#senior-deep-dive-langgraph-in-production)
+- [06 — MLOps](06_mlops/interview.md#senior-deep-dive-mlops-for-genai)
+- [07 — Architecture](07_architecture/interview.md#senior-deep-dive-genai-architecture)
+- [08 — CI/CD](08_cicd/interview.md#senior-deep-dive-cicd-for-genai)
+- [09 — Monitoring & Observability](09_monitoring/interview.md#senior-deep-dive-monitoring--observability)
+- [10 — Governance](10_governance/interview.md#senior-deep-dive-ai-governance--responsible-ai)
+- [11 — Fine-Tuning](11_fine-tuning/interview.md#senior-deep-dive-fine-tuning-in-production)
+- [12 — Deployment](12_deployment/interview.md#senior-deep-dive-genai-deployment)
+- [13 — LLMOps](13_LLMops/interview.md#senior-deep-dive-llmops)

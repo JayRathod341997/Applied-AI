@@ -15,6 +15,10 @@ A comprehensive hands-on course covering Generative AI, LangChain, RAG, Agentic 
 9. **09_monitoring** - Observability & Monitoring
 10. **10_governance** - AI Governance & Compliance
 
+## Interview Preparation
+
+Every module's `interview.md` ends with a **Senior Deep Dive** (system design & scale, trade-offs & decisions, failure modes & incidents, leadership/behavioral, plus a Staff/Principal stretch). See the consolidated index in [interview_preparation_guide.md](interview_preparation_guide.md#senior-deep-dives-by-module).
+
 ## Getting Started
 
 See [SETUP.md](SETUP.md) for installation instructions.
