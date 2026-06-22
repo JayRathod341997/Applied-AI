@@ -28,6 +28,11 @@ fully offline (no API keys) coding exercise so you can practice the patterns han
    environment management, and automated rollback.
    *Exercise:* a canary release controller that auto-promotes or auto-rolls-back on a mock error rate.
 
+4. **[04_aws_cicd](./04_aws_cicd/)** — The same CI/CD patterns grounded in the core **AWS**
+   services: SageMaker (model registry + endpoints) and Bedrock; CodePipeline / CodeBuild /
+   CodeDeploy; ECR, Fargate, and Lambda; and S3, CloudFormation/CDK, and CloudWatch.
+   *Exercise:* an AWS CodeDeploy-style traffic-shift deployer (Canary / Linear / AllAtOnce) with CloudWatch-alarm auto-rollback.
+
 ## Per-subtopic layout
 
 Each subtopic folder contains:
@@ -49,6 +54,7 @@ Each subtopic folder contains:
 - Test probabilistic LLM behaviour with a golden set and gate the build on quality
 - Wire prompt regression and AI evaluation gates into a CI pipeline
 - Package, deploy, and roll back AI services with containers, IaC, and canary releases
+- Map all of the above onto the core AWS services (SageMaker/Bedrock, CodePipeline/CodeBuild/CodeDeploy, ECR/Fargate/Lambda, S3/CloudFormation/CloudWatch) for a concrete cloud pipeline
 
 ## Prerequisites
 

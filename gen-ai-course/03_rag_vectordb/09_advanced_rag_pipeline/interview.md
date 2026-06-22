@@ -58,9 +58,9 @@
 
 ### Q3: Explain hybrid search and its implementation.
 
-**Answer:** Hybrid search combines vector and keyword search:
+ **Answer:** Hybrid search combines vector and keyword search:
 
-**Why Hybrid?**
+ **Why Hybrid?**
 - Vector search: Handles semantic similarity, synonyms
 - Keyword search: Handles exact matches, named entities
 - Combined: Better recall and precision
@@ -80,7 +80,7 @@ Query
   Combined Ranked Results
 ```
 
-**RRF Formula:** Score = Σ(1 / (k + rank)) across result sets
+**RRF Formula:** ```Score = Σ(1 / (k + rank))``` across result sets
 
 **Benefits:**
 - No need to normalize scores across different search methods
