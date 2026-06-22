@@ -617,15 +617,19 @@ Level 5 — MLOps Mature
 
 ---
 
-## Senior Deep Dive: Deploying GenAI on Azure (AI Foundry, Azure OpenAI, Azure ML, AKS)
+## Senior Deep Dive: GenAI Deployment
 
-> *For Azure-centric roles. Interviewers want you to pick the right Azure surface for a workload and reason about quota, cost, latency, and enterprise security.*
+> *Interviewers at the senior/staff level want you to reason across the full deployment spectrum — from picking the right Azure or AWS surface, to designing for HA, to owning failure incidents and setting org-wide standards. The questions below span system design, trade-offs, failure modes, and leadership.*
 
-### Q: What is Azure AI Foundry and how does it relate to Azure OpenAI and Azure ML?
+### System Design & Scale
+
+Azure-centric roles in particular probe your ability to pick the right Azure surface for a workload and reason about quota, cost, latency, and enterprise security. The four Q&As below come from that lens; the patterns generalize to AWS and GCP equivalents.
+
+#### Q: What is Azure AI Foundry and how does it relate to Azure OpenAI and Azure ML?
 
 **Answer:** **Azure AI Foundry** (formerly Azure AI Studio) is the unified platform/SDK for building, evaluating, and deploying generative-AI apps on Azure. Layers: a **model catalog** (Azure OpenAI models + open models like Llama/Mistral/Phi, deployable as **serverless APIs / MaaS pay-per-token** or to **managed compute**); **Azure OpenAI Service** (managed OpenAI endpoints in *your* tenant — private networking, RBAC, regional control, content filtering — what enterprises use instead of api.openai.com); **Foundry capabilities** (prompt flow, evaluations, tracing, content safety, agent service, fine-tuning); and **Azure Machine Learning** (broader MLOps for any model, classic ML included — pipelines, registry, managed endpoints). Framing: **Foundry = GenAI app lifecycle; Azure OpenAI = hosted frontier models; Azure ML = general MLOps + custom/open models.**
 
-### Q: Serverless API (MaaS/PTU) vs Managed Online Endpoint vs self-hosted on AKS — how do you choose?
+#### Q: Serverless API (MaaS/PTU) vs Managed Online Endpoint vs self-hosted on AKS — how do you choose?
 
 **Answer:**
 
@@ -637,17 +641,75 @@ Level 5 — MLOps Mature
 
 Key lever: **PTU (Provisioned Throughput)** trades a fixed reservation for guaranteed throughput + stable latency (size from peak tokens/min). Below break-even volume PAYG is cheaper; above it PTU wins and protects against 429 throttling.
 
-### Q: How do you handle Azure OpenAI quota, throttling, and high availability?
+#### Q: How do you handle Azure OpenAI quota, throttling, and high availability?
 
 **Answer:** Quota is **per-region, per-model, in TPM (tokens/min) and RPM** — design within it. Handle **429s** with exponential backoff + jitter and respect `Retry-After`. HA pattern: put **Azure API Management (APIM)** or a gateway in front of **multiple** Azure OpenAI deployments across regions and **load-balance/failover** (the "AOAI smart load balancer" pattern) — spreads load across quota pools and survives a regional incident. Use **PTU for baseline + PAYG spillover** for burst, **semantic/exact caching** (Azure Cache for Redis) for repeated prompts, and the **Batch API** for non-real-time bulk jobs at lower cost.
 
-### Q: How do you secure an enterprise Azure OpenAI / Foundry deployment?
+#### Q: How do you secure an enterprise Azure OpenAI / Foundry deployment?
 
 **Answer:** **Identity** — Microsoft Entra ID + **Managed Identity** (no API keys in code); least-privilege RBAC. **Network** — **Private Endpoints / VNet integration**, disable public access, egress control; region pinning / **EU Data Boundary** for residency. **Secrets** — Azure Key Vault. **Data protection** — Azure OpenAI does **not** train on your prompts/completions and isolates per tenant (document for compliance); CMK for at-rest encryption. **Safety** — Content Safety filters + prompt shields + groundedness at the gateway. **Auditability** — Azure Monitor / Log Analytics + Microsoft Purview for full request logging and lineage (also feeds the model-risk audit trail).
 
-### Q: Describe an end-to-end MLOps/LLMOps pipeline on Azure.
+#### Q: Describe an end-to-end MLOps/LLMOps pipeline on Azure.
 
 **Answer:** (1) **Source/data** — Azure Repos/GitHub for code+prompts; Data Lake/Blob + Purview for data. (2) **Train/build** — Azure ML pipelines or Foundry fine-tuning; track with **MLflow** (native). (3) **Register** — versioned model + prompt + eval artifacts in the **Azure ML registry** with model cards. (4) **Evaluate (the LLM gate)** — **Foundry evaluations** (groundedness/relevance/coherence/safety) in CI; block promotion on regression. (5) **CI/CD** — Azure DevOps or GitHub Actions → staging endpoint → automated eval → **canary/blue-green** promotion to a managed endpoint or PTU deployment. (6) **Monitor** — Azure Monitor + App Insights for latency/cost/tokens; Azure ML drift monitors; online groundedness/safety sampling → retrain/rollback loop. (7) **Govern** — human-in-the-loop for high-risk, audit logs, periodic revalidation. The senior signal: the **eval gate and rollback loop are first-class, not bolted on**.
+
+---
+
+### Trade-offs & Decisions
+
+#### Q: Managed service (Azure OpenAI / AWS Bedrock) vs self-hosted on AKS/EKS — how do you decide?
+
+**Answer:** Default to managed unless you have a specific reason to self-host. Managed services (Azure OpenAI, Bedrock) give you zero-ops, SLA-backed reliability, built-in compliance controls, and instant access to frontier models — the right answer for most enterprise workloads. Self-hosting on AKS/EKS with vLLM or Triton makes sense when: (a) you need a fine-tuned or proprietary model not available as a managed endpoint; (b) data-sovereignty requirements prohibit sending data to a third-party API even within Azure/AWS; (c) volume is high enough that per-token costs dominate and a fixed GPU fleet is cheaper at steady state; or (d) you need deep control over batching, quantization, or KV-cache configuration for latency. The hidden cost of self-hosting is ops burden — GPU node management, CUDA compatibility, vLLM upgrades, OOM debugging. Size this against the managed-service premium before committing.
+
+#### Q: Serverless vs container vs dedicated endpoint — how do you choose the right serving shape?
+
+**Answer:** Match the serving shape to the traffic pattern. **Serverless** (Azure Container Apps, AWS Lambda + Bedrock, Modal) is right for spiky or low-average traffic where scale-to-zero economics matter — but cold starts (15–60s for large models) make it unsuitable for latency-sensitive user-facing products. Use provisioned concurrency or keep a warm instance if P95 cold-start is unacceptable. **Containerized endpoints** (Azure ML managed endpoint, SageMaker real-time endpoint) provide consistent latency, autoscale on request rate, and no cold-start problem at the cost of a minimum always-on instance. Right for steady interactive traffic. **Dedicated/self-hosted** (GPU VMs or AKS node pools) gives maximum throughput-per-dollar at high volume and full control over model runtime, but requires your team to own scaling, node health, and failover. Decision tree: prototype → serverless or managed API; production interactive → managed endpoint; high-volume or custom model → dedicated/AKS.
+
+#### Q: Provisioned throughput (PTU/reserved capacity) vs pay-per-token — when does each win?
+
+**Answer:** Pay-per-token is strictly better at low or unpredictable volume — you pay only for what you use, with no commitment. Provisioned throughput (Azure PTU, SageMaker Provisioned Concurrency, Bedrock Provisioned Throughput) trades a fixed reservation fee for three benefits: (1) **guaranteed capacity** — no 429 throttling during peaks; (2) **stable latency** — shared-pool congestion does not affect your endpoint; (3) **lower per-token cost** above the break-even volume. Calculate break-even: monthly PTU cost / (PAYG token price × tokens saved per month). For Azure OpenAI, Microsoft publishes a PTU sizing calculator — input your peak TPM requirement, get the PTU count, compare against PAYG. Common pattern: reserve PTU for baseline load, overflow to PAYG for bursts. This gives the cost predictability of a reservation with the safety valve of elastic capacity.
+
+---
+
+### Failure Modes & Incidents
+
+#### Q: Your Azure OpenAI endpoint goes down mid-traffic — what is your failover design?
+
+**Answer:** The right answer is that a single endpoint should never be a single point of failure. Production design: deploy to **two or more Azure OpenAI instances in different regions** (e.g., East US + West Europe) behind **Azure API Management** or a custom gateway. APIM retry policy routes around a 5xx or timeout to the next backend within the same request, invisible to the caller. Health probes continuously verify each backend; unhealthy ones are removed from rotation. For AKS-hosted models, use a multi-region AKS cluster with Azure Front Door or Traffic Manager routing. During an incident: (1) confirm the scope (single model, single region, full service); (2) shift 100% traffic to the surviving region; (3) open an Azure support ticket if it is a platform issue; (4) engage PTU support channel if capacity is degraded. Post-incident: add runbook entry, validate that the automatic failover fired correctly, and review whether the quota in the failover region was sufficient to absorb full traffic.
+
+#### Q: Cold-start latency spikes after a model container scales up — how do you diagnose and fix it?
+
+**Answer:** Cold-start latency has two components: **container startup** (image pull, process init) and **model weight load** (reading multi-GB weights from disk or network storage into GPU VRAM). The fix targets whichever is dominant. For container startup: pre-pull images onto nodes with a DaemonSet or use Azure Container Registry geo-replication; keep image layers small (multi-stage builds, no weights baked in). For model weight load: mount weights from a PersistentVolumeClaim backed by an SSD-tier disk (Azure Premium SSD or UltraDisk) rather than pulling from Blob every cold start; on AKS, use **node image caching** or a **init container** that warms the weight file into the node's page cache before the serving container starts. Operationally: set an **HPA min-replicas > 0** to prevent full scale-to-zero for latency-sensitive workloads; use KEDA's scale-from-zero only for batch or asynchronous inference jobs. Measure time-to-first-token on the first request after a scale-up event as your cold-start SLI; alert if it exceeds the budget.
+
+#### Q: You receive an alert that inference costs spiked 10× overnight after a new model version deployed — what do you do?
+
+**Answer:** Treat it as an incident: contain first, investigate second. Immediate actions: (1) check if the new model version is still rolling out and pause the canary if so; (2) compare average prompt + completion token counts between the old and new version — a prompt engineering regression or a model that generates verbose output explains most cost spikes; (3) verify the per-token price did not change (model version may map to a different pricing tier); (4) check if a feature flag opened a previously throttled code path (e.g., a summarization step that was disabled is now calling the model for every request). Root causes in order of frequency: (a) new system prompt is much longer; (b) new version does not apply `max_tokens` correctly and generates until the context limit; (c) traffic increased legitimately (check request count vs token-per-request ratio separately); (d) a bug causes retry storms — each failed request is retried N times. Fix and redeploy; add a **cost anomaly alert** (Azure Cost Management budget alert or CloudWatch billing alarm) with a threshold at 2× the daily baseline so this is caught within hours next time.
+
+---
+
+### Leadership & Behavioral
+
+#### Q: How do you set deployment and rollback standards for GenAI services across your team?
+
+**Answer:** Standards only stick when they are encoded in tooling, not just documented. The deployment standard I establish has three components. First, a **promotion gate**: no artifact reaches production without passing an automated evaluation suite (latency regression test, LLM-judge quality score, safety filter pass rate) — this is a hard CI check, not a recommendation. Second, a **graduated rollout policy**: all changes start at canary (5% traffic) with an automatic hold period and SLO watch; promotion to 100% is automated only if error rate and P95 latency stay within budget, otherwise it pages the on-call and halts. Third, a **rollback SLA**: the team commits to a rollback time (typically under 5 minutes for a managed endpoint, under 15 for AKS rolling deployment); we test this quarterly in a chaos drill. For GenAI specifically, quality regressions (hallucination rate, tone drift) are harder to detect than latency spikes — I require the LLM-judge score to be part of the automated promotion gate, not just a post-hoc dashboard. The first time a rollback actually fires automatically and saves a production incident, the team believes in the standard. Until then, it is just paperwork.
+
+#### Q: Tell me about a time you led a zero-downtime model migration in production. (STAR)
+
+**Answer (STAR format):**
+
+**Situation:** Our customer-facing summarization service was running a fine-tuned GPT-3.5 model on Azure ML managed endpoints. We needed to migrate to a fine-tuned GPT-4o-mini variant to improve output quality, but the service handled ~2 M requests/day and any latency or quality regression would directly impact customer NPS.
+
+**Task:** Lead the migration with zero downtime, measurable quality improvement, and a tested rollback path — on a two-week timeline before a product launch.
+
+**Action:** I structured it as a four-phase canary migration. Phase 1: deployed the new model as a second Azure ML endpoint behind the same APIM gateway, with 0% traffic — ran offline eval (Foundry groundedness + human spot-check on 500 samples) to confirm quality uplift. Phase 2: routed 5% of live traffic to the new endpoint, collected 48 h of real-traffic LLM-judge scores and latency data, compared to the control cohort. Phase 3: incremented to 25%, then 75% over 72 h with automated SLO gates at each step — the gate checked that P95 TTFT was within 15% of baseline and LLM-judge score was ≥ baseline. Phase 4: cutover to 100% and decommissioned the old endpoint after a 24 h observation window. I wrote the rollback runbook before starting: APIM weight back to 0%/100% within 2 minutes, triggered by on-call or by the automated SLO breach alert.
+
+**Result:** Migration completed in 11 days with zero customer-visible incidents. P95 TTFT improved by 8% (new model was more quantization-friendly at the same instance SKU). LLM-judge quality score rose 12 points. The canary framework I built became the team's standard model migration playbook.
+
+---
+
+> 🎯 **Staff/Principal stretch:** Define your organization's GenAI deployment platform strategy — managed vs self-hosted mix, multi-region architecture, and build-vs-buy decisions — over a 2-year horizon.
+>
+> **Model answer:** The strategy I would propose starts from a "managed by default, self-host by exception" principle: Azure OpenAI PTU for frontier models used in customer-facing products (SLA-backed, compliance controls, no GPU ops burden), Azure ML managed endpoints for fine-tuned or open models where managed API is not available, and AKS GPU node pools reserved for the subset of workloads with volume, latency, or data-residency requirements that managed services cannot satisfy. Multi-region is non-negotiable for any service with an SLA: primary region for low latency, secondary for failover, with APIM load-balancing across Azure OpenAI quota pools. Build-vs-buy framework: build only the thin orchestration and routing layer (gateway, semantic cache, cost attribution) that gives you vendor optionality; buy the inference infrastructure. The 2-year trajectory: Year 1 — standardize on managed endpoints and establish the LLMOps pipeline (eval gate, canary automation, cost attribution); Year 2 — consolidate open-model workloads onto a shared AKS inference platform with a model registry to prevent N teams each running their own vLLM clusters. The senior signal is recognizing that platform strategy is as much about preventing fragmentation as it is about picking the right technology.
 
 ---
 
