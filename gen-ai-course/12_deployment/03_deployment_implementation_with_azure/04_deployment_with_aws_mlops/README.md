@@ -232,7 +232,7 @@ flowchart LR
     AS -->|adjust instance count| VB
 ```
 
-> For the conceptual model of scaling signals and cold starts, see [12.5 Scaling & Reliability](../05_production_operations/README.md#scaling--reliability).
+> For the conceptual model of scaling signals and cold starts, see [12.5 Scaling & Reliability](../../05_production_operations/README.md#scaling--reliability).
 
 ### Endpoint types
 
