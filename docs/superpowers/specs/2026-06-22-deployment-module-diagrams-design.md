@@ -16,7 +16,7 @@ Module 12 currently has 5 files (~5,200 lines total):
 - `03_.../04_deployment_with_aws_mlops/README.md` (990 lines) — Bedrock, SageMaker, Lambda, ECS/EKS, SageMaker Pipelines
 - `interview.md` (658 lines) — Q&A prep
 
-The content is rich in code but visually sparse. There are **no Mermaid diagrams anywhere in the entire `gen-ai-course/`** — existing visuals are ASCII box-art in the main README only. The dense, code-heavy files lack a coherent visual mental model of how production serving works end to end.
+The content is rich in code but visually sparse. Module 12 itself has **no Mermaid diagrams** — its only visuals are ASCII box-art in the main README. However, Mermaid is an **established convention elsewhere in the course**: 10 files use it, notably module 04 (agentic design patterns) and module 13 (LLMops). They use plain, unthemed Mermaid (`graph LR`, `stateDiagram-v2`, `sequenceDiagram`, `subgraph`, `note` blocks) with descriptive node labels — no custom styling/theming. The new diagrams must match this existing style. The dense, code-heavy files lack a coherent visual mental model of how production serving works end to end.
 
 ---
 
@@ -28,7 +28,7 @@ Rejected alternatives:
 - **B — enhance everything in place:** pushes already-large files toward 1,800+ lines and scatters the cross-cutting mental model across four files.
 - **C — pure visual companion file:** under-delivers on the "more content" request and divorces diagrams from explanation.
 
-**Diagram format policy:** Mermaid for anything with branching/flow/sequence; ASCII only for tiny inline structures. Every Mermaid block gets a one-line caption above it.
+**Diagram format policy:** Mermaid for anything with branching/flow/sequence; ASCII only for tiny inline structures. Mermaid follows the existing course style — plain/unthemed, descriptive node labels, `subgraph`/`note` where helpful. Every Mermaid block gets a one-line caption above it.
 
 ---
 
