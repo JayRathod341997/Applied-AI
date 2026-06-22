@@ -651,8 +651,39 @@ Key lever: **PTU (Provisioned Throughput)** trades a fixed reservation for guara
 
 ---
 
+## Section 5: Serving Internals & Production Operations (Senior Deep-Dive)
+
+> Visual companion: [12.5 Production Operations](05_production_operations/README.md) diagrams the request lifecycle, scaling, releases, and observability covered below.
+
+### Q: Walk me through what happens to an inference request from gateway to response.
+
+**Answer:** Client hits the API gateway → auth + rate-limit check → the request is enqueued → a batching scheduler dequeues it and adds it to the in-flight batch on a GPU worker → tokens stream back as they are generated. The queue + continuous batching keep the GPU saturated; the **KV-cache** holds prior tokens' attention state so they are not recomputed each step. Latency splits into **time-to-first-token** (queue wait + prompt processing) and **inter-token latency** (decode speed).
+
+### Q: Why use continuous batching instead of static batching?
+
+**Answer:** Static batching collects N requests, runs the whole batch to completion, and leaves the GPU idle until the slowest sequence finishes. **Continuous batching** lets new requests join the running batch immediately and lets finished sequences free their slot, keeping the GPU full. It raises **throughput**; it does not make a single request faster.
+
+### Q: HPA vs KEDA vs Karpenter — when does each apply?
+
+**Answer:** **HPA** scales pod replicas on resource/custom metrics already exposed on the pods. **KEDA** scales on external event signals (queue depth, requests/sec) and can uniquely **scale to zero**. **Karpenter** (or Cluster Autoscaler) adds/removes **nodes** when pods can't be scheduled for lack of GPUs. The distinction: pods vs nodes, and internal vs external signals.
+
+### Q: How do you roll back a bad model deployment safely?
+
+**Answer:** Prefer strategies with fast undo — **blue-green** (switch traffic back instantly) or **canary** (small blast radius; abort by routing 100% back to the old version). Wire an **automatic trigger** on SLO breach (error rate / p95 latency) rather than relying on a human at 3 a.m. If the previous version is unhealthy or the rollback window has passed, **fix-forward** instead. Verify metrics recover after either path.
+
+### Q: What metrics matter most for an LLM service?
+
+**Answer:** p50/p95 **time-to-first-token** and **inter-token latency**; error/timeout rate; throughput (req/s) and GPU utilization; **queue depth**; and the GenAI-specific signals — **prompt/completion token counts** (both your bill and your capacity signal) and **answer quality**. Track **p95, not averages** — tail latency is what users actually feel.
+
+### Q: How do you attribute token cost per customer?
+
+**Answer:** **Tag each request at the gateway** (customer / feature / model), meter prompt + completion tokens, multiply by the per-1K-token price, and aggregate by tag into a cost dashboard. Add a budget check that can alert, throttle, or **downgrade to a cheaper model**. Tagging at the edge makes attribution automatic rather than a quarterly forensics exercise.
+
+---
+
 *References:*
 - *[01 Deployment Overview →](01_deployment_overview/README.md)*
 - *[02 Deployment Techniques →](02_deployment_techniques/README.md)*
 - *[03 Azure Implementation →](03_deployment_implementation_with_azure/README.md)*
 - *[04 AWS MLOps →](03_deployment_implementation_with_azure/04_deployment_with_aws_mlops/README.md)*
+- *[05 Production Operations →](05_production_operations/README.md)*
