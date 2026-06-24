@@ -17,3 +17,4 @@ This section covers common production-level issues encountered in RAG systems, t
 - [Debugging Techniques](./debugging_techniques.md)
 - [Solutions & Best Practices](./solutions.md)
 - [System Design for Production](./system_design.md)
+- [Scenario: Real-Time RAG at Scale (1M+ Documents)](./scenario_scale_realtime.md)

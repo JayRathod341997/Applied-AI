@@ -8,7 +8,7 @@ Evaluating RAG systems is essential for understanding their quality and improvin
 
 ## 1. Evaluation Framework Overview
 
-
+```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        RAG System Input                             │
 │                                                                     │
@@ -41,7 +41,7 @@ Evaluating RAG systems is essential for understanding their quality and improvin
 │  │ Retrieval Metrics │  │Generation Metrics│  │End-to-End Metrics│ │
 │  └───────────────────┘  └──────────────────┘  └─────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
-
+```
 
 ---
 

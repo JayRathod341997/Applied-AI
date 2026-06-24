@@ -22,6 +22,7 @@ This module now includes comprehensive production guidance:
 - **[Debugging Techniques](./07_production_issues/debugging_techniques.md)** - Systematic approaches to diagnose and resolve issues
 - **[Solutions & Best Practices](./07_production_issues/solutions.md)** - Proven fixes and implementation patterns
 - **[System Design for Production](./07_production_issues/system_design.md)** - Architecture patterns for scalable, reliable RAG systems
+- **[Scenario: Real-Time RAG at Scale (1M+ Documents)](./07_production_issues/scenario_scale_realtime.md)** - End-to-end walkthrough: bulk ingestion, index tuning, metadata strategies, real-time inference & freshness
 
 ## Advanced RAG Pipeline (New)
 
