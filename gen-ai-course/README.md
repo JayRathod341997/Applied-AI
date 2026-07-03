@@ -14,6 +14,11 @@ A comprehensive hands-on course covering Generative AI, LangChain, RAG, Agentic 
 8. **08_cicd** - CI/CD for AI
 9. **09_monitoring** - Observability & Monitoring
 10. **10_governance** - AI Governance & Compliance
+11. **11_fine-tuning** - Fine-Tuning
+12. **12_deployment** - Deployment
+13. **13_LLMops** - LLMOps
+14. **14_ai_projects** - AI Projects
+15. **15_ai_security_governance** - AI Security & Governance Engineering — runtime controls: prompt filtering, output validation, misuse protection, policy-as-code, audit & traceability, agent safety patterns
 
 ## Interview Preparation
 

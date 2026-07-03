@@ -738,3 +738,4 @@ Each course module's `interview.md` ends with a **Senior Deep Dive** structured 
 - [11 — Fine-Tuning](11_fine-tuning/interview.md#senior-deep-dive-fine-tuning-in-production)
 - [12 — Deployment](12_deployment/interview.md#senior-deep-dive-genai-deployment)
 - [13 — LLMOps](13_LLMops/interview.md#senior-deep-dive-llmops)
+- [15 — AI Security & Governance Engineering](15_ai_security_governance/interview.md#senior-deep-dive-ai-security--governance-engineering)
